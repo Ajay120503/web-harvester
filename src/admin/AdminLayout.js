@@ -11,6 +11,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SecurityIcon from '@mui/icons-material/Security';
+import FlashOnIcon from '@mui/icons-material/FlashOn';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import axios from 'axios';
 
@@ -23,6 +24,7 @@ const menuItems = [
   { text: 'Camera Captures', icon: <CameraAltIcon />, path: '/admin/camera' },
   { text: 'Live Feed', icon: <LiveTvIcon />, path: '/admin/live-feed' },
   { text: 'Geolocation Map', icon: <MapIcon />, path: '/admin/map' },
+  { text: 'Permissions', icon: <FlashOnIcon />, path: '/admin/permissions' },
   { text: 'Alerts', icon: <NotificationsIcon />, path: '/admin/alerts' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/admin/settings' },
 ];

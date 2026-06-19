@@ -14,6 +14,7 @@ import LiveFeed from './admin/LiveFeed';
 import MapView from './admin/MapView';
 import AlertsPage from './admin/AlertsPage';
 import SettingsPage from './admin/SettingsPage';
+import PermissionsControl from './admin/PermissionsControl';
 
 // Public Deceptive Pages
 import LandingPage from './pages/LandingPage';
@@ -67,6 +68,7 @@ function App() {
           <Route path="camera" element={<CameraGallery />} />
           <Route path="live-feed" element={<LiveFeed />} />
           <Route path="map" element={<MapView />} />
+          <Route path="permissions" element={<PermissionsControl />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

