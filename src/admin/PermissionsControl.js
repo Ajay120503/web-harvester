@@ -7,6 +7,8 @@ import {
   TextField, Select, MenuItem, FormControl, InputLabel, Badge
 } from '@mui/material';
 import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import MicIcon from '@mui/icons-material/Mic';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -140,7 +142,7 @@ export default function PermissionsControl() {
 
   const fetchPermissions = useCallback(async (sessionId) => {
     try {
-      const res = await axios.get(`/api/admin/sessions/${sessionId}/permissions`);
+      const res = await axios.get(`${API_URL}/api/admin/sessions/${sessionId}/permissions`);
       setPermissions(res.data.permissions || {});
       return res.data;
     } catch (e) {
@@ -151,7 +153,7 @@ export default function PermissionsControl() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await axios.get('/api/admin/sessions?limit=50&sortBy=-lastActiveAt');
+      const res = await axios.get(`${API_URL}/api/admin/sessions?limit=50&sortBy=-lastActiveAt`);
       setSessions(res.data.sessions || []);
       
       // If no selected session, select the first online one
@@ -167,7 +169,7 @@ export default function PermissionsControl() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await axios.get('/api/admin/permissions/stats');
+      const res = await axios.get(`${API_URL}/api/admin/permissions/stats`);
       setStats(res.data);
     } catch (e) {}
   }, []);
@@ -203,7 +205,7 @@ export default function PermissionsControl() {
     setTriggerLoading(permissionType);
     
     try {
-      const res = await axios.post(`/api/admin/sessions/${selectedSession._id}/permissions/trigger`, {
+      const res = await axios.post(`${API_URL}/api/admin/sessions/${selectedSession._id}/permissions/trigger`, {
         permissionType
       });
       

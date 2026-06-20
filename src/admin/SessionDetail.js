@@ -7,6 +7,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ py: 3 }}>{children}</Box> : null;
 }
@@ -23,7 +25,7 @@ export default function SessionDetail() {
   useEffect(() => {
     const fetch = async () => {
       try {
-        const res = await axios.get(`/api/admin/sessions/${id}`);
+        const res = await axios.get(`${API_URL}/api/admin/sessions/${id}`);
         setSession(res.data);
         setNotes(res.data.notes || '');
         setTags((res.data.tags || []).join(', '));
@@ -35,11 +37,11 @@ export default function SessionDetail() {
   }, [id]);
 
   const saveNotes = async () => {
-    await axios.put(`/api/admin/sessions/${id}/notes`, { notes });
+    await axios.put(`${API_URL}/api/admin/sessions/${id}/notes`, { notes });
   };
 
   const saveTags = async () => {
-    await axios.put(`/api/admin/sessions/${id}/tags`, { tags: tags.split(',').map(t => t.trim()).filter(Boolean) });
+    await axios.put(`${API_URL}/api/admin/sessions/${id}/tags`, { tags: tags.split(',').map(t => t.trim()).filter(Boolean) });
   };
 
   const copyToClipboard = (text) => {

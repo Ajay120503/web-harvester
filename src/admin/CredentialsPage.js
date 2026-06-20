@@ -11,6 +11,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const strengthColors = {
   weak: { bg: 'rgba(255,0,85,0.15)', text: '#ff0055', label: 'Weak' },
   medium: { bg: 'rgba(255,170,0,0.15)', text: '#ffaa00', label: 'Medium' },
@@ -39,7 +41,7 @@ export default function CredentialsPage() {
       if (search) params.search = search;
       if (source) params.source = source;
       if (strength) params.strength = strength;
-      const res = await axios.get('/api/admin/credentials', { params });
+      const res = await axios.get(`${API_URL}/api/admin/credentials`, { params });
       setCredentials(res.data.credentials);
       setTotal(res.data.pagination.total);
     } catch(e) { console.error(e); }
@@ -50,7 +52,7 @@ export default function CredentialsPage() {
 
   const handleDelete = async (id) => {
     try { 
-      await axios.delete(`/api/admin/credentials/${id}`); 
+      await axios.delete(`${API_URL}/api/admin/credentials/${id}`); 
       setDeleteDialog(null);
       fetchCredentials(); 
     } catch(e) { console.error(e); }

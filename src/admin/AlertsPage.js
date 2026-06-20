@@ -186,7 +186,7 @@ export default function AlertsPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) return;
-    axios.get('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(`${process.env.REACT_APP_API_URL || ''}/api/admin/stats`, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => {
         setStats({
           total: res.data.totalCredentials || 0,

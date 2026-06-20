@@ -1,4 +1,12 @@
 import React from 'react';
+import axios from 'axios';
+
+// Set auth header immediately from localStorage (before any component renders)
+const storedToken = localStorage.getItem('admin_token');
+if (storedToken) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+}
+
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 

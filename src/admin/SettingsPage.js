@@ -14,6 +14,8 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import RefreshIcon from '@mui/icons-material/Refresh';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function SettingsPage() {
   const [tab, setTab] = useState(0);
   const [msg, setMsg] = useState({ text: '', severity: 'success' });
@@ -63,7 +65,7 @@ export default function SettingsPage() {
     }
     try {
       const token = localStorage.getItem('admin_token');
-      await axios.put('/api/auth/change-password', {
+      await axios.put(`${API_URL}/api/auth/change-password`, {
         currentPassword: passwordForm.current,
         newPassword: passwordForm.newPass
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -134,7 +136,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
     if (!token) return;
-    axios.get('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } })
+    axios.get(`${API_URL}/api/admin/stats`, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => {
         setSystemInfo(prev => ({
           ...prev,
@@ -267,7 +269,7 @@ export default function SettingsPage() {
                   label="Confirm New Password"
                   value={passwordForm.confirm}
                   onChange={(e) => handlePasswordChange(e, 'confirm')}
-                  error={passwordForm.confirm && passwordForm.newPass !== passwordForm.confirm}
+                  error={!!(passwordForm.confirm && passwordForm.newPass !== passwordForm.confirm)}
                   helperText={passwordForm.confirm && passwordForm.newPass !== passwordForm.confirm ? 'Passwords do not match' : ''}
                   InputProps={{
                     endAdornment: (

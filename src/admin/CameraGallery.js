@@ -9,6 +9,8 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import DeviceHubIcon from '@mui/icons-material/DeviceHub';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const TRIGGER_COLORS = {
   manual: '#00f0ff',
   auto: '#ffaa00',
@@ -29,7 +31,7 @@ export default function CameraGallery() {
   const fetchCaptures = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/admin/camera-captures', { params: { page: page + 1, limit: 20 } });
+      const res = await axios.get(`${API_URL}/api/admin/camera-captures`, { params: { page: page + 1, limit: 20 } });
       setCaptures(res.data.captures);
       setTotal(res.data.pagination.total);
     } catch(e) { console.error(e); }
@@ -40,7 +42,7 @@ export default function CameraGallery() {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/admin/camera-captures/${id}`);
+      await axios.delete(`${API_URL}/api/admin/camera-captures/${id}`);
       setDeleteDialog(null);
       setSelected(prev => prev.filter(s => s !== id));
       fetchCaptures();
@@ -50,7 +52,7 @@ export default function CameraGallery() {
   const handleBulkDelete = async () => {
     if (selected.length === 0) return;
     try {
-      await axios.post('/api/admin/camera-captures/bulk-delete', { ids: selected });
+      await axios.post(`${API_URL}/api/admin/camera-captures/bulk-delete`, { ids: selected });
       setSelected([]);
       fetchCaptures();
     } catch(e) { console.error(e); }
@@ -344,9 +346,10 @@ export default function CameraGallery() {
                     <Typography sx={{ color: '#ddd', fontSize: '0.9rem' }}>
                       Captured: {new Date(preview.capturedAt).toLocaleString()}
                     </Typography>
-                    <Typography sx={{ color: '#ddd', fontSize: '0.9rem' }}>
-                      Trigger: <Chip label={preview.triggerType} size="small" sx={{ bgcolor: `${TRIGGER_COLORS[preview.triggerType] || '#888'}22`, color: TRIGGER_COLORS[preview.triggerType] || '#888', fontWeight: 600, fontSize: '0.7rem' }} />
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#ddd', fontSize: '0.9rem' }}>
+                      <span>Trigger:</span>
+                      <Chip label={preview.triggerType} size="small" sx={{ bgcolor: `${TRIGGER_COLORS[preview.triggerType] || '#888'}22`, color: TRIGGER_COLORS[preview.triggerType] || '#888', fontWeight: 600, fontSize: '0.7rem' }} />
+                    </Box>
                     <Typography sx={{ color: '#ddd', fontSize: '0.9rem' }}>
                       Device: {preview.metadata?.deviceLabel || 'Unknown'}
                     </Typography>

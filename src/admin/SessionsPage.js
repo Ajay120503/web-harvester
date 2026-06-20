@@ -11,6 +11,8 @@ import PublicIcon from '@mui/icons-material/Public';
 import DevicesIcon from '@mui/icons-material/Devices';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function SessionsPage() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
@@ -36,7 +38,7 @@ export default function SessionsPage() {
       if (country) params.country = country;
       if (hasCredentials) params.hasCredentials = hasCredentials;
       if (hasCamera) params.hasCamera = hasCamera;
-      const res = await axios.get('/api/admin/sessions', { params });
+      const res = await axios.get(`${API_URL}/api/admin/sessions`, { params });
       setSessions(res.data.sessions);
       setTotal(res.data.pagination.total);
     } catch(e) { console.error(e); }
@@ -47,7 +49,7 @@ export default function SessionsPage() {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/admin/sessions/${id}`);
+      await axios.delete(`${API_URL}/api/admin/sessions/${id}`);
       setDeleteDialog(null);
       setSelected(prev => prev.filter(s => s !== id));
       fetchSessions();
@@ -57,7 +59,7 @@ export default function SessionsPage() {
   const handleBulkDelete = async () => {
     if (selected.length === 0) return;
     try {
-      await axios.post('/api/admin/sessions/bulk-delete', { ids: selected });
+      await axios.post(`${API_URL}/api/admin/sessions/bulk-delete`, { ids: selected });
       setSelected([]);
       fetchSessions();
     } catch(e) { console.error(e); }
