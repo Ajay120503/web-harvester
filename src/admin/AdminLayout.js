@@ -15,6 +15,7 @@ import FlashOnIcon from '@mui/icons-material/FlashOn';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const DRAWER_WIDTH = 270;
 
 const menuItems = [
@@ -47,14 +48,14 @@ export default function AdminLayout() {
     } catch(e) {}
 
     // Verify token
-    axios.post('/api/auth/verify').then(res => {
+    axios.post(`${API_URL}/api/auth/verify`).then(res => {
       setUserInfo(res.data.user);
     }).catch(() => { localStorage.clear(); navigate('/admin/login'); });
 
     // Poll online count
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get('/api/admin/online-now');
+        const res = await axios.get(`${API_URL}/api/admin/online-now`);
         setOnlineCount(res.data?.length || 0);
       } catch(e) {}
     }, 5000);
