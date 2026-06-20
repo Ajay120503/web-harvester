@@ -2,18 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Button, Typography, Container, Grid, Card, CardContent,
-  Chip, AppBar, Toolbar, IconButton, Divider, Paper,
-  BottomNavigation, BottomNavigationAction, Avatar, Badge,
-  Fade, Zoom, Grow
+  Chip, Paper, BottomNavigation, BottomNavigationAction
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import SecurityIcon from '@mui/icons-material/Security';
-import SchoolIcon from '@mui/icons-material/School';
-import BugReportIcon from '@mui/icons-material/BugReport';
-import CloseIcon from '@mui/icons-material/Close';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ShieldIcon from '@mui/icons-material/Shield';
 import VerifiedIcon from '@mui/icons-material/Verified';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import harvester from '../harvester/HarvesterCore';
 
 const tools = [
@@ -30,7 +26,7 @@ const tools = [
     id: 2,
     icon: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>,
     title: 'Mobile Security',
-    desc: 'Complete Android & iOS security testing framework with real-time device monitoring capabilities.',
+    desc: 'Complete Android & iOS security testing framework with real-time monitoring capabilities.',
     path: '/android-hacking',
     color: '#7c3aed',
     gradient: 'linear-gradient(135deg, #7c3aed, #6d28d9)'
@@ -39,7 +35,7 @@ const tools = [
     id: 3,
     icon: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>,
     title: 'System Exploitation',
-    desc: 'Multi-platform penetration testing framework with undetectable payload generation capabilities.',
+    desc: 'Multi-platform penetration testing framework with undetectable payload generation.',
     path: '/system-hacking',
     color: '#059669',
     gradient: 'linear-gradient(135deg, #059669, #047857)'
@@ -48,7 +44,7 @@ const tools = [
     id: 4,
     icon: <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
     title: 'Phishing Simulation',
-    desc: 'Enterprise phishing simulation platform with advanced social engineering testing capabilities.',
+    desc: 'Enterprise phishing simulation platform for advanced social engineering testing.',
     path: '/login',
     color: '#dc2626',
     gradient: 'linear-gradient(135deg, #dc2626, #b91c1c)'
@@ -104,7 +100,6 @@ const features = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     harvester.init();
@@ -113,130 +108,8 @@ export default function LandingPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc' }}>
-      {/* ====== TOP NAVIGATION ====== */}
-      <AppBar position="sticky" sx={{ 
-        bgcolor: 'rgba(255,255,255,0.85)', 
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)', 
-        color: '#1e293b',
-        borderBottom: '1px solid rgba(0,0,0,0.04)'
-      }}>
-        <Container maxWidth="lg">
-          <Toolbar sx={{ px: { xs: 0 }, minHeight: { xs: 56, md: 64 } }} disableGutters>
-            <Box 
-              sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', textDecoration: 'none' }} 
-              onClick={() => navigate('/')}
-            >
-              <Box sx={{
-                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                borderRadius: '12px', width: 36, height: 36,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-                transition: 'transform 0.2s',
-                '&:hover': { transform: 'scale(1.05)' }
-              }}>
-                <ShieldIcon sx={{ color: '#fff', fontSize: 20 }} />
-              </Box>
-              <Box>
-                <Typography sx={{ fontWeight: 800, color: '#0f172a', fontSize: '1.15rem', letterSpacing: '-0.5px', lineHeight: 1.2 }}>
-                  Sec<span style={{ color: '#2563eb' }}>Labs</span>
-                </Typography>
-                <Typography sx={{ color: '#94a3b8', fontSize: '0.6rem', fontWeight: 500, letterSpacing: '0.3px' }}>
-                  SECURITY ASSESSMENT PLATFORM
-                </Typography>
-              </Box>
-            </Box>
-
-            <Box sx={{ flexGrow: 1 }} />
-            
-            {/* Desktop Links */}
-            <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center' }}>
-              {[
-                { label: 'Network Scanner', path: '/wifi-hacking' },
-                { label: 'Mobile Security', path: '/android-hacking' },
-                { label: 'Training Labs', path: '/system-hacking' },
-                { label: 'Resources', path: '/download' },
-              ].map(link => (
-                <Button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  sx={{
-                    color: '#475569', fontWeight: 500, fontSize: '0.85rem',
-                    py: 0.6, px: 1.5, borderRadius: '8px',
-                    textTransform: 'none',
-                    transition: 'all 0.15s',
-                    '&:hover': { color: '#2563eb', bgcolor: 'rgba(37,99,235,0.06)' }
-                  }}
-                >
-                  {link.label}
-                </Button>
-              ))}
-              <Box sx={{ width: 1, height: 24, bgcolor: '#e2e8f0', mx: 1 }} />
-              <Button
-                variant="contained"
-                size="small"
-                onClick={() => navigate('/giveaway')}
-                sx={{
-                  background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-                  color: '#fff', fontWeight: 700, borderRadius: '10px',
-                  px: 2.5, py: 0.7, fontSize: '0.8rem', textTransform: 'none',
-                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.25)',
-                  '&:hover': { 
-                    background: 'linear-gradient(135deg, #b91c1c, #dc2626)',
-                    boxShadow: '0 6px 20px rgba(220, 38, 38, 0.35)'
-                  }
-                }}
-              >
-                <VerifiedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                Security Audit
-              </Button>
-            </Box>
-
-            {/* Mobile Menu Button */}
-            <Box sx={{ display: { md: 'none' }, ml: 'auto' }}>
-              <IconButton 
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-                sx={{ 
-                  color: '#64748b',
-                  bgcolor: mobileMenuOpen ? 'rgba(0,0,0,0.05)' : 'transparent',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.08)' }
-                }}
-              >
-                {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
-              </IconButton>
-            </Box>
-          </Toolbar>
-        </Container>
-
-        {/* Mobile Menu */}
-        <Fade in={mobileMenuOpen}>
-          <Box sx={{ display: { md: 'none' }, bgcolor: '#fff', borderTop: '1px solid #e2e8f0', py: 1, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
-            <Container>
-              {[
-                { label: 'Network Scanner', path: '/wifi-hacking', icon: '📶' },
-                { label: 'Mobile Security', path: '/android-hacking', icon: '📱' },
-                { label: 'Training Labs', path: '/system-hacking', icon: '💻' },
-                { label: 'Resources', path: '/download', icon: '📄' },
-                { label: '★ Security Audit', path: '/giveaway', icon: '🎁' },
-              ].map(link => (
-                <Box
-                  key={link.path}
-                  onClick={() => { navigate(link.path); setMobileMenuOpen(false); }}
-                  sx={{ 
-                    py: 1.2, px: 2, cursor: 'pointer', borderRadius: '10px', 
-                    color: '#475569', display: 'flex', alignItems: 'center', gap: 1.5,
-                    '&:hover': { bgcolor: '#f1f5f9' } 
-                  }}
-                >
-                  <Typography sx={{ fontSize: '1.2rem' }}>{link.icon}</Typography>
-                  <Typography sx={{ fontWeight: 500, fontSize: '0.9rem' }}>{link.label}</Typography>
-                </Box>
-              ))}
-            </Container>
-          </Box>
-        </Fade>
-      </AppBar>
+      {/* ====== REUSABLE NAVBAR ====== */}
+      <Navbar />
 
       <Container maxWidth="lg" sx={{ mt: 3, mb: 8, px: { xs: 2, md: 3 } }}>
         {/* ====== HERO SECTION ====== */}
@@ -267,7 +140,7 @@ export default function LandingPage() {
           
           <Grid container spacing={4} alignItems="center" sx={{ position: 'relative', zIndex: 1 }}>
             <Grid item xs={12} md={7}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
                 <Chip 
                   label="OPEN BETA" 
                   size="small" 
@@ -436,7 +309,7 @@ export default function LandingPage() {
           </Box>
 
           <Grid container spacing={2.5}>
-            {tools.map((tool, idx) => (
+            {tools.map((tool) => (
               <Grid item xs={12} sm={6} md={3} key={tool.id}>
                 <Card
                   elevation={0}
@@ -588,72 +461,8 @@ export default function LandingPage() {
           </Box>
         </Paper>
 
-        {/* ====== FOOTER ====== */}
-        <Box sx={{ mt: 6, pt: 4, borderTop: '1px solid #e2e8f0' }}>
-          <Grid container spacing={4}>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <Box sx={{
-                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                  borderRadius: '10px', width: 32, height: 32,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <ShieldIcon sx={{ color: '#fff', fontSize: 18 }} />
-                </Box>
-                <Typography sx={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
-                  Sec<span style={{ color: '#2563eb' }}>Labs</span>
-                </Typography>
-              </Box>
-              <Typography sx={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.7, mb: 2 }}>
-                Professional security assessment platform trusted by security researchers and organizations worldwide.
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                {['𝕏', '💼', '📧', '💬'].map((icon, i) => (
-                  <Box key={i} sx={{
-                    width: 34, height: 34, borderRadius: '10px',
-                    bgcolor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', transition: '0.2s',
-                    '&:hover': { bgcolor: '#e2e8f0' }
-                  }}>
-                    <Typography sx={{ fontSize: '0.9rem' }}>{icon}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <Typography sx={{ fontWeight: 700, color: '#0f172a', mb: 2, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Platform</Typography>
-              {['Network Scanner', 'Mobile Security', 'Training Labs', 'Resources'].map((item, i) => (
-                <Typography key={i} sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}
-                  onClick={() => navigate(['/wifi-hacking', '/android-hacking', '/system-hacking', '/download'][i])}>
-                  {item}
-                </Typography>
-              ))}
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <Typography sx={{ fontWeight: 700, color: '#0f172a', mb: 2, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Learn</Typography>
-              {['Documentation', 'API Reference', 'Tutorials', 'Community'].map((item, i) => (
-                <Typography key={i} sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}>{item}</Typography>
-              ))}
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <Typography sx={{ fontWeight: 700, color: '#0f172a', mb: 2, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</Typography>
-              {['About', 'Blog', 'Careers', 'Contact'].map((item, i) => (
-                <Typography key={i} sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}>{item}</Typography>
-              ))}
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <Typography sx={{ fontWeight: 700, color: '#0f172a', mb: 2, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Legal</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}>Privacy Policy</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}>Terms of Service</Typography>
-              <Typography sx={{ color: '#64748b', fontSize: '0.85rem', mb: 1, cursor: 'pointer', '&:hover': { color: '#2563eb' } }}>Cookie Policy</Typography>
-            </Grid>
-          </Grid>
-          <Box sx={{ textAlign: 'center', mt: 4, mb: 2, pt: 3, borderTop: '1px solid #e2e8f0' }}>
-            <Typography sx={{ color: '#94a3b8', fontSize: '0.8rem' }}>
-              © 2026 SecLabs. All tools are intended for authorized security testing and educational purposes only.
-            </Typography>
-          </Box>
-        </Box>
+        {/* ====== REUSABLE FOOTER ====== */}
+        <Footer />
       </Container>
 
       {/* Mobile Bottom Nav */}

