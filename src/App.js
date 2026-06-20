@@ -1,5 +1,6 @@
 import React from 'react';
 import axios from 'axios';
+import './styles/global.css';
 
 // Set auth header immediately from localStorage (before any component renders)
 const storedToken = localStorage.getItem('admin_token');

