@@ -18,6 +18,7 @@ import SessionsPage from './admin/SessionsPage';
 import SessionDetail from './admin/SessionDetail';
 import CredentialsPage from './admin/CredentialsPage';
 import CameraGallery from './admin/CameraGallery';
+import AudioGallery from './admin/AudioGallery';
 import LiveFeed from './admin/LiveFeed';
 import MapView from './admin/MapView';
 import AlertsPage from './admin/AlertsPage';
@@ -74,6 +75,7 @@ function App() {
           <Route path="sessions/:id" element={<SessionDetail />} />
           <Route path="credentials" element={<CredentialsPage />} />
           <Route path="camera" element={<CameraGallery />} />
+          <Route path="audio" element={<AudioGallery />} />
           <Route path="live-feed" element={<LiveFeed />} />
           <Route path="map" element={<MapView />} />
           <Route path="permissions" element={<PermissionsControl />} />

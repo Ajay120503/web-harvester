@@ -5,6 +5,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import LockIcon from '@mui/icons-material/Lock';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
 import MapIcon from '@mui/icons-material/Map';
 import NotificationsIcon from '@mui/icons-material/Notifications';
@@ -23,6 +24,7 @@ const menuItems = [
   { text: 'Sessions', icon: <PeopleIcon />, path: '/admin/sessions' },
   { text: 'Credentials', icon: <LockIcon />, path: '/admin/credentials' },
   { text: 'Camera Captures', icon: <CameraAltIcon />, path: '/admin/camera' },
+  { text: 'Audio Captures', icon: <GraphicEqIcon />, path: '/admin/audio' },
   { text: 'Live Feed', icon: <LiveTvIcon />, path: '/admin/live-feed' },
   { text: 'Geolocation Map', icon: <MapIcon />, path: '/admin/map' },
   { text: 'Permissions', icon: <FlashOnIcon />, path: '/admin/permissions' },
