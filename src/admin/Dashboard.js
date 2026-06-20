@@ -53,6 +53,8 @@ const SectionHeader = ({ title, subtitle }) => (
   </Box>
 );
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await axios.get('/api/admin/stats');
+        const res = await axios.get(`${API_URL}/api/admin/stats`);
         setStats(res.data);
       } catch(e) { console.error(e); }
       finally { setLoading(false); }
