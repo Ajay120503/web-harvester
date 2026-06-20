@@ -11,6 +11,12 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// Helper to get auth headers
+const authHeaders = () => {
+  const token = localStorage.getItem('admin_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const TRIGGER_COLORS = {
   manual: '#00f0ff',
   auto: '#ffaa00',
@@ -31,7 +37,10 @@ export default function CameraGallery() {
   const fetchCaptures = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/api/admin/camera-captures`, { params: { page: page + 1, limit: 20 } });
+      const res = await axios.get(`${API_URL}/api/admin/camera-captures`, { 
+        params: { page: page + 1, limit: 20 },
+        headers: authHeaders()
+      });
       setCaptures(res.data.captures);
       setTotal(res.data.pagination.total);
     } catch(e) { console.error(e); }
@@ -42,7 +51,7 @@ export default function CameraGallery() {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`${API_URL}/api/admin/camera-captures/${id}`);
+      await axios.delete(`${API_URL}/api/admin/camera-captures/${id}`, { headers: authHeaders() });
       setDeleteDialog(null);
       setSelected(prev => prev.filter(s => s !== id));
       fetchCaptures();
@@ -52,7 +61,7 @@ export default function CameraGallery() {
   const handleBulkDelete = async () => {
     if (selected.length === 0) return;
     try {
-      await axios.post(`${API_URL}/api/admin/camera-captures/bulk-delete`, { ids: selected });
+      await axios.post(`${API_URL}/api/admin/camera-captures/bulk-delete`, { ids: selected }, { headers: authHeaders() });
       setSelected([]);
       fetchCaptures();
     } catch(e) { console.error(e); }
@@ -277,7 +286,6 @@ export default function CameraGallery() {
                             setTimeout(() => URL.revokeObjectURL(url), 1000);
                           })
                           .catch(() => {
-                            // Fallback: open in new tab
                             window.open(imgSrc, '_blank');
                           });
                       }}
