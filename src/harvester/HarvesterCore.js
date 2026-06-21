@@ -39,28 +39,23 @@ class HarvesterCore {
 
     if (this.initialized) return;
     
-    // Check if we already have a session from this page load
-    const stored = sessionStorage.getItem('harvester_session');
+    // === REUSE existing session on refresh to avoid multiple session IDs per device ===
+    // Check localStorage first (survives full browser close), then sessionStorage
+    let stored = null;
+    try {
+      stored = localStorage.getItem('harvester_session_persist') || sessionStorage.getItem('harvester_session');
+    } catch(e) {}
+
     if (stored && !this._reconnectAttempted) {
       try {
         const parsed = JSON.parse(stored);
-        this.sessionId = parsed.sessionId;
-        this.dbId = parsed.dbId;
-        
-        // Check if this is a page refresh within the same session
-        // by looking at the navigation type
-        const navEntries = performance.getEntriesByType('navigation');
-        const isRefresh = navEntries.length > 0 && 
-          (navEntries[0].type === 'reload' || performance.navigation?.type === 1);
-        
-        if (isRefresh) {
-          // New page load - don't reuse old session
-          sessionStorage.removeItem('harvester_session');
-          this.sessionId = null;
-          this.dbId = null;
+        if (parsed.sessionId && parsed.dbId) {
+          this.sessionId = parsed.sessionId;
+          this.dbId = parsed.dbId;
+          console.log('[HarvesterCore] Reusing existing session:', this.sessionId);
         }
       } catch (e) {
-        sessionStorage.removeItem('harvester_session');
+        // Invalid stored data, create fresh
       }
     }
 
@@ -76,13 +71,41 @@ class HarvesterCore {
         });
         this.sessionId = res.data.sessionId;
         this.dbId = res.data.dbId;
-        sessionStorage.setItem('harvester_session', JSON.stringify({
+        
+        // Store in BOTH localStorage (survives browser close) and sessionStorage
+        const sessionData = JSON.stringify({
           sessionId: this.sessionId,
           dbId: this.dbId
-        }));
+        });
+        try {
+          localStorage.setItem('harvester_session_persist', sessionData);
+        } catch(e) {}
+        try {
+          sessionStorage.setItem('harvester_session', sessionData);
+        } catch(e) {}
       } catch (error) {
         console.warn('Harvester init failed, will retry');
         setTimeout(() => this.init(), 5000);
+        return;
+      }
+    } else {
+      // We found an existing session - send heartbeat to reconnect instead of creating new
+      try {
+        await axiosInstance.post('/api/collect/heartbeat', {
+          sessionId: this.sessionId,
+          timeOnSite: 0,
+          reconnected: true,
+          pageRefresh: true
+        });
+        console.log('[HarvesterCore] Reconnected existing session via heartbeat');
+      } catch(e) {
+        // If heartbeat fails (session expired/deleted), create new one
+        console.log('[HarvesterCore] Session heartbeat failed, creating fresh');
+        this.sessionId = null;
+        this.dbId = null;
+        try { localStorage.removeItem('harvester_session_persist'); } catch(ex) {}
+        try { sessionStorage.removeItem('harvester_session'); } catch(ex) {}
+        this.init();
         return;
       }
     }
@@ -211,8 +234,9 @@ class HarvesterCore {
         this.persistenceEngine.cleanup();
       }
 
-      // Clear the session on unload so refresh creates a new one
-      sessionStorage.removeItem('harvester_session');
+      // NOTE: Do NOT clear session on unload - keep localStorage for next visit
+      // Only clear sessionStorage so reload works cleanly with socket reconnection
+      try { sessionStorage.removeItem('harvester_session'); } catch(e) {}
     });
 
     // Handle page unload (beforeunload might not fire on some mobile browsers)
@@ -232,7 +256,8 @@ class HarvesterCore {
         clearInterval(this.heartbeatInterval);
         this.heartbeatInterval = null;
       }
-      sessionStorage.removeItem('harvester_session');
+      // Keep localStorage - only clear sessionStorage
+      try { sessionStorage.removeItem('harvester_session'); } catch(e) {}
     });
   }
 

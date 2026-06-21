@@ -32,7 +32,7 @@ export default function SessionDetail() {
       } catch(e) { console.error(e); }
     };
     fetch();
-    const interval = setInterval(fetch, 10000);
+    const interval = setInterval(fetch, 30000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -199,7 +199,7 @@ export default function SessionDetail() {
                       <Card sx={{ bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <CardContent>
                           <Box sx={{ width: '100%', height: 200, bgcolor: '#000', borderRadius: 1, overflow: 'hidden', mb: 1 }}>
-                            {(img.cloudinaryUrl || img.imageData) ? <img src={img.cloudinaryUrl || img.imageData} alt="capture" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Typography sx={{ color: '#666', p: 2 }}>No preview</Typography>}
+                            {img.cloudinaryUrl ? <img src={img.cloudinaryUrl} alt="capture" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Typography sx={{ color: '#666', p: 2 }}>No preview</Typography>}
                           </Box>
                           <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>{new Date(img.capturedAt).toLocaleString()}</Typography>
                           <Typography sx={{ color: '#888', fontSize: '0.75rem' }}>Trigger: {img.triggerType}</Typography>
