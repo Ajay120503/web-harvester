@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, Container, Card, CardContent, TextField, LinearProgress, Grid, Chip, Avatar, Paper, Fade } from '@mui/material';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import harvester from '../harvester/HarvesterCore';
 
 export default function DownloadPage() {
@@ -130,7 +128,7 @@ export default function DownloadPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f5f7fa' }}>
-      <Navbar />
+      {/* <Navbar /> */}
       
       {/* Header */}
       <Box sx={{ 
@@ -290,7 +288,7 @@ export default function DownloadPage() {
         </Box>
       </Container>
       
-      <Footer simple />
+      {/* <Footer simple /> */}
     </Box>
   );
 }

@@ -8,8 +8,6 @@ import SecurityIcon from '@mui/icons-material/Security';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ShieldIcon from '@mui/icons-material/Shield';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
 import harvester from '../harvester/HarvesterCore';
 
 const tools = [
@@ -109,7 +107,6 @@ export default function LandingPage() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#f8fafc' }}>
       {/* ====== REUSABLE NAVBAR ====== */}
-      <Navbar />
 
       <Container maxWidth="lg">
         {/* ====== HERO SECTION ====== */}
@@ -462,7 +459,7 @@ export default function LandingPage() {
         </Paper>
 
         {/* ====== REUSABLE FOOTER ====== */}
-        <Footer />
+        {/* <Footer /> */}
       </Container>
 
       {/* Mobile Bottom Nav */}
