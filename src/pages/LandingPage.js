@@ -111,7 +111,7 @@ export default function LandingPage() {
       {/* ====== REUSABLE NAVBAR ====== */}
       <Navbar />
 
-      <Container maxWidth="lg" sx={{ mt: 3, mb: 8, px: { xs: 2, md: 3 } }}>
+      <Container maxWidth="lg">
         {/* ====== HERO SECTION ====== */}
         <Paper
           elevation={0}

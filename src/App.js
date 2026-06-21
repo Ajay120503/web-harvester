@@ -40,10 +40,10 @@ import SystemHackingPage from './pages/SystemHackingPage';
 
 const darkTheme = createTheme({
   palette: {
-    mode: 'dark',
+    mode: 'light',
     primary: { main: '#00f0ff' },
     secondary: { main: '#ff0055' },
-    background: { default: '#0a0e17', paper: '#111827' },
+    background: { default: '#0a0e17', paper: '#fff' },
     success: { main: '#00ff88' },
     warning: { main: '#ffaa00' },
     error: { main: '#ff3355' }

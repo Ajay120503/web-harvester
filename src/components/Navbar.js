@@ -1,207 +1,337 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar, Toolbar, Container, Typography, Box, Button,
-  IconButton, Fade, Badge, Slide
+  IconButton, Drawer, List, ListItemButton, ListItemIcon,
+  ListItemText, Divider, useTheme, useMediaQuery, Slide,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import ShieldIcon from '@mui/icons-material/Shield';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import WifiIcon from '@mui/icons-material/Wifi';
+import SmartphoneIcon from '@mui/icons-material/Smartphone';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 
 const navLinks = [
-  { label: 'Network Scanner', path: '/wifi-hacking', icon: '📶' },
-  { label: 'Mobile Security', path: '/android-hacking', icon: '📱' },
-  { label: 'Training Labs', path: '/system-hacking', icon: '💻' },
-  { label: 'Resources', path: '/download', icon: '📄' },
+  { label: 'Network Scanner', path: '/wifi-hacking', icon: WifiIcon },
+  { label: 'Mobile Security', path: '/android-hacking', icon: SmartphoneIcon },
+  { label: 'Training Labs', path: '/system-hacking', icon: TerminalIcon },
+  { label: 'Resources', path: '/download', icon: DescriptionIcon },
 ];
 
-export default function Navbar({ transparent = false, showAuditBtn = true, elevation = 0 }) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+// Hide the bar on scroll-down, reveal on scroll-up (nice on mobile, keeps content visible)
+function HideOnScroll({ children }) {
+  const [hidden, setHidden] = useState(false);
+  const [lastY, setLastY] = useState(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      setHidden(y > lastY && y > 80);
+      setLastY(y);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [lastY]);
 
   return (
-    <AppBar 
-      position="sticky" 
-      sx={{ 
-        bgcolor: transparent ? 'transparent' : 'rgba(255,255,255,0.85)', 
-        backdropFilter: transparent ? 'none' : 'blur(16px)',
-        WebkitBackdropFilter: transparent ? 'none' : 'blur(16px)',
-        boxShadow: elevation > 0 ? `0 1px 3px rgba(0,0,0,${0.06 * elevation})` : 'none', 
-        color: transparent ? '#fff' : '#1e293b',
-        borderBottom: transparent ? 'none' : '1px solid rgba(0,0,0,0.04)'
-      }}
-    >
-      <Container maxWidth="lg">
-        <Toolbar sx={{ px: { xs: 0 }, minHeight: { xs: 56, md: 64 } }} disableGutters>
-          {/* Logo */}
-          <Box 
-            sx={{ 
-              display: 'flex', alignItems: 'center', gap: 1.5, 
-              cursor: 'pointer', textDecoration: 'none',
-              '&:hover .logo-icon': { transform: 'scale(1.05)' }
-            }} 
-            onClick={() => navigate('/')}
-          >
-            <Box 
-              className="logo-icon"
-              sx={{
-                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                borderRadius: '12px', width: 36, height: 36,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-                transition: 'transform 0.2s'
-              }}
-            >
-              <ShieldIcon sx={{ color: '#fff', fontSize: 20 }} />
-            </Box>
-            <Box>
-              <Typography sx={{ 
-                fontWeight: 800, 
-                color: transparent ? '#fff' : '#0f172a', 
-                fontSize: '1.15rem', 
-                letterSpacing: '-0.5px', 
-                lineHeight: 1.2 
-              }}>
-                Sec<span style={{ color: transparent ? '#93c5fd' : '#2563eb' }}>Labs</span>
-              </Typography>
-              <Typography sx={{ 
-                color: transparent ? 'rgba(255,255,255,0.5)' : '#94a3b8', 
-                fontSize: '0.6rem', 
-                fontWeight: 500, 
-                letterSpacing: '0.3px' 
-              }}>
-                SECURITY ASSESSMENT PLATFORM
-              </Typography>
-            </Box>
-          </Box>
+    <Slide appear={false} direction="down" in={!hidden}>
+      {children}
+    </Slide>
+  );
+}
 
-          <Box sx={{ flexGrow: 1 }} />
-          
-          {/* Desktop Links */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, alignItems: 'center' }}>
-            {navLinks.map(link => (
-              <Button
-                key={link.path}
-                onClick={() => navigate(link.path)}
+export default function Header({ transparent = false, showAuditBtn = true }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Close mobile drawer whenever route changes
+  useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+
+  const goTo = useCallback((path) => {
+    navigate(path);
+    setMobileMenuOpen(false);
+  }, [navigate]);
+
+  // Visual theme: solid once scrolled, even if "transparent" was requested for hero pages
+  const isSolid = !transparent || scrolled;
+  const textColor = isSolid ? '#0f172a' : '#fff';
+  const subTextColor = isSolid ? '#94a3b8' : 'rgba(255,255,255,0.55)';
+  const linkColor = isSolid ? '#475569' : 'rgba(255,255,255,0.75)';
+  const linkHoverColor = isSolid ? '#2563eb' : '#fff';
+
+  return (
+    <>
+      <HideOnScroll>
+        <AppBar
+          position="sticky"
+          elevation={0}
+          sx={{
+            bgcolor: isSolid ? 'rgba(255,255,255,0.85)' : 'transparent',
+            backdropFilter: isSolid ? 'blur(16px)' : 'none',
+            WebkitBackdropFilter: isSolid ? 'blur(16px)' : 'none',
+            boxShadow: scrolled ? '0 1px 3px rgba(15,23,42,0.06)' : 'none',
+            borderBottom: isSolid ? '1px solid rgba(0,0,0,0.04)' : 'none',
+            color: textColor,
+            transition: 'background-color 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
+          }}
+        >
+          <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3, lg: 4 } }}>
+            <Toolbar
+              disableGutters
+              sx={{ minHeight: { xs: 56, sm: 64 } }}
+            >
+              {/* Logo */}
+              <Box
+                role="button"
+                tabIndex={0}
+                aria-label="SecLabs home"
+                onClick={() => goTo('/')}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && goTo('/')}
                 sx={{
-                  color: transparent ? 'rgba(255,255,255,0.7)' : '#475569', 
-                  fontWeight: location.pathname === link.path ? 700 : 500, 
-                  fontSize: '0.85rem',
-                  py: 0.6, px: 1.5, 
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  transition: 'all 0.15s',
-                  bgcolor: location.pathname === link.path 
-                    ? (transparent ? 'rgba(255,255,255,0.1)' : 'rgba(37,99,235,0.06)') 
-                    : 'transparent',
-                  '&:hover': { 
-                    color: transparent ? '#fff' : '#2563eb', 
-                    bgcolor: transparent ? 'rgba(255,255,255,0.08)' : 'rgba(37,99,235,0.06)' 
-                  }
+                  display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 },
+                  cursor: 'pointer', outline: 'none', flexShrink: 0,
+                  '&:hover .logo-icon': { transform: 'scale(1.05)' },
                 }}
               >
-                {link.label}
-              </Button>
-            ))}
-            
-            {showAuditBtn && (
-              <>
-                <Box sx={{ 
-                  width: 1, height: 24, 
-                  bgcolor: transparent ? 'rgba(255,255,255,0.15)' : '#e2e8f0', 
-                  mx: 1 
-                }} />
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={() => navigate('/giveaway')}
+                <Box
+                  className="logo-icon"
                   sx={{
-                    background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-                    color: '#fff', fontWeight: 700, borderRadius: '10px',
-                    px: 2.5, py: 0.7, fontSize: '0.8rem', textTransform: 'none',
-                    boxShadow: '0 4px 14px rgba(220, 38, 38, 0.25)',
-                    '&:hover': { 
-                      background: 'linear-gradient(135deg, #b91c1c, #dc2626)',
-                      boxShadow: '0 6px 20px rgba(220, 38, 38, 0.35)'
-                    },
-                    animation: 'pulse 3s ease-in-out infinite'
+                    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                    borderRadius: '12px',
+                    width: { xs: 32, sm: 36 },
+                    height: { xs: 32, sm: 36 },
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+                    transition: 'transform 0.2s',
+                    flexShrink: 0,
                   }}
                 >
-                  <VerifiedIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                  Security Audit
-                </Button>
-              </>
-            )}
-          </Box>
+                  <ShieldIcon sx={{ color: '#fff', fontSize: { xs: 18, sm: 20 } }} />
+                </Box>
+                <Box sx={{ display: { xs: 'none', sm: 'block' }, minWidth: 0 }}>
+                  <Typography
+                    sx={{
+                      fontWeight: 800, color: textColor,
+                      fontSize: { xs: '1rem', sm: '1.15rem' },
+                      letterSpacing: '-0.5px', lineHeight: 1.2, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Sec<span style={{ color: isSolid ? '#2563eb' : '#93c5fd' }}>Labs</span>
+                  </Typography>
+                  <Typography
+                    sx={{
+                      color: subTextColor,
+                      fontSize: '0.6rem', fontWeight: 500, letterSpacing: '0.3px',
+                      display: { xs: 'none', sm: 'block' },
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    SECURITY ASSESSMENT PLATFORM
+                  </Typography>
+                </Box>
+              </Box>
 
-          {/* Mobile Menu Button */}
-          <Box sx={{ display: { md: 'none' }, ml: 'auto' }}>
-            <IconButton 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-              sx={{ 
-                color: transparent ? 'rgba(255,255,255,0.7)' : '#64748b',
-                bgcolor: mobileMenuOpen 
-                  ? (transparent ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)') 
-                  : 'transparent',
-                '&:hover': { 
-                  bgcolor: transparent ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' 
-                }
-              }}
+              <Box sx={{ flexGrow: 1 }} />
+
+              {/* Desktop Links */}
+              <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 0.5, alignItems: 'center' }}>
+                {navLinks.map(({ label, path, icon: Icon }) => {
+                  const active = location.pathname === path;
+                  return (
+                    <Button
+                      key={path}
+                      onClick={() => goTo(path)}
+                      startIcon={<Icon sx={{ fontSize: 17 }} />}
+                      sx={{
+                        color: active ? (isSolid ? '#2563eb' : '#fff') : linkColor,
+                        fontWeight: active ? 700 : 500,
+                        fontSize: '0.85rem',
+                        py: 0.7, px: 1.5,
+                        borderRadius: '8px',
+                        textTransform: 'none',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s',
+                        bgcolor: active
+                          ? (isSolid ? 'rgba(37,99,235,0.08)' : 'rgba(255,255,255,0.12)')
+                          : 'transparent',
+                        '&:hover': {
+                          color: linkHoverColor,
+                          bgcolor: isSolid ? 'rgba(37,99,235,0.06)' : 'rgba(255,255,255,0.08)',
+                        },
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  );
+                })}
+
+                {showAuditBtn && (
+                  <>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => goTo('/giveaway')}
+                      startIcon={<VerifiedIcon sx={{ fontSize: 16 }} />}
+                      sx={{
+                        background: 'linear-gradient(135deg, #dc2626, #ef4444)',
+                        color: '#fff', fontWeight: 700, borderRadius: '10px',
+                        px: 2.5, py: 0.7, fontSize: '0.8rem', textTransform: 'none',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 14px rgba(220, 38, 38, 0.25)',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #b91c1c, #dc2626)',
+                          boxShadow: '0 6px 20px rgba(220, 38, 38, 0.35)',
+                          transform: 'translateY(-1px)',
+                        },
+                      }}
+                    >
+                      Security Audit
+                    </Button>
+                  </>
+                )}
+              </Box>
+
+              {/* Mobile Menu Button */}
+              <Box sx={{ display: { xs: 'flex', md: 'none' }, ml: 1 }}>
+                <IconButton
+                  onClick={() => setMobileMenuOpen(true)}
+                  aria-label="Open menu"
+                  size={isMobile ? 'medium' : 'large'}
+                  sx={{
+                    color: isSolid ? '#64748b' : 'rgba(255,255,255,0.85)',
+                    bgcolor: isSolid ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.1)',
+                    '&:hover': { bgcolor: isSolid ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.16)' },
+                  }}
+                >
+                  <MenuIcon fontSize={isMobile ? 'small' : 'medium'} />
+                </IconButton>
+              </Box>
+            </Toolbar>
+          </Container>
+        </AppBar>
+      </HideOnScroll>
+
+      {/* Mobile Drawer */}
+      <Drawer
+        anchor="right"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        PaperProps={{
+          sx: {
+            width: { xs: '85vw', sm: 360 },
+            maxWidth: 380,
+            bgcolor: '#0f172a',
+            color: '#fff',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Drawer header */}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            px: 2.5, py: 2.5, borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{
+                background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                borderRadius: '10px', width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <ShieldIcon sx={{ color: '#fff', fontSize: 18 }} />
+              </Box>
+              <Typography sx={{ fontWeight: 800, fontSize: '1.05rem' }}>
+                Sec<span style={{ color: '#93c5fd' }}>Labs</span>
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="Close menu"
+              sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
             >
-              {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+              <CloseIcon />
             </IconButton>
           </Box>
-        </Toolbar>
-      </Container>
 
-      {/* Mobile Menu */}
-      <Fade in={mobileMenuOpen}>
-        <Box sx={{ 
-          display: { md: 'none' }, 
-          bgcolor: transparent ? 'rgba(15,23,42,0.98)' : '#fff', 
-          borderTop: transparent ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0', 
-          py: 1, 
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-          backdropFilter: transparent ? 'blur(20px)' : 'none'
-        }}>
-          <Container>
-            {[
-              ...navLinks,
-              ...(showAuditBtn ? [{ label: '★ Security Audit', path: '/giveaway', icon: '🎁', highlight: true }] : []),
-            ].map(link => (
-              <Box
-                key={link.path}
-                onClick={() => { navigate(link.path); setMobileMenuOpen(false); }}
-                sx={{ 
-                  py: 1.2, px: 2, cursor: 'pointer', 
-                  borderRadius: '10px', 
-                  color: link.highlight 
-                    ? (transparent ? '#fca5a5' : '#dc2626') 
-                    : (transparent ? 'rgba(255,255,255,0.7)' : '#475569'), 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 1.5,
-                  fontWeight: link.highlight ? 700 : 500,
-                  bgcolor: location.pathname === link.path 
-                    ? (transparent ? 'rgba(255,255,255,0.06)' : '#f1f5f9') 
-                    : 'transparent',
-                  '&:hover': { 
-                    bgcolor: transparent ? 'rgba(255,255,255,0.1)' : '#f1f5f9' 
-                  } 
+          {/* Links */}
+          <List sx={{ px: 1.5, py: 1.5, flexGrow: 1 }}>
+            {navLinks.map(({ label, path, icon: Icon }) => {
+              const active = location.pathname === path;
+              return (
+                <ListItemButton
+                  key={path}
+                  onClick={() => goTo(path)}
+                  sx={{
+                    borderRadius: '12px', mb: 0.5, py: 1.3,
+                    bgcolor: active ? 'rgba(37,99,235,0.18)' : 'transparent',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <Box sx={{
+                      width: 34, height: 34, borderRadius: '9px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: active
+                        ? 'linear-gradient(135deg, #2563eb, #7c3aed)'
+                        : 'rgba(255,255,255,0.08)',
+                    }}>
+                      <Icon sx={{ fontSize: 18, color: '#fff' }} />
+                    </Box>
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={label}
+                    primaryTypographyProps={{
+                      fontWeight: active ? 700 : 500,
+                      fontSize: '0.92rem',
+                      color: '#fff',
+                    }}
+                  />
+                  <ChevronRightIcon sx={{ fontSize: 18, color: 'rgba(255,255,255,0.35)' }} />
+                </ListItemButton>
+              );
+            })}
+          </List>
+
+          {showAuditBtn && (
+            <Box sx={{ p: 2, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <Button
+                fullWidth
+                onClick={() => goTo('/giveaway')}
+                startIcon={<CardGiftcardIcon sx={{ fontSize: 19 }} />}
+                endIcon={<ChevronRightIcon />}
+                sx={{
+                  background: 'linear-gradient(135deg, #dc2626, #ef4444)',
+                  color: '#fff', fontWeight: 700, borderRadius: '12px',
+                  py: 1.4, fontSize: '0.92rem', textTransform: 'none',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 8px 20px rgba(220, 38, 38, 0.3)',
+                  '&:hover': { background: 'linear-gradient(135deg, #b91c1c, #dc2626)' },
                 }}
               >
-                <Typography sx={{ fontSize: '1.2rem' }}>{link.icon}</Typography>
-                <Typography sx={{ fontWeight: link.highlight ? 700 : 500, fontSize: '0.9rem' }}>
-                  {link.label}
-                </Typography>
-              </Box>
-            ))}
-          </Container>
+                Security Audit
+              </Button>
+            </Box>
+          )}
         </Box>
-      </Fade>
-    </AppBar>
+      </Drawer>
+    </>
   );
 }
